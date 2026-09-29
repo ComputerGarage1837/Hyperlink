@@ -17,6 +17,11 @@ add_executable(HyperlinkHost WIN32
     src/settings.cpp
     src/stream.cpp
     src/updater.cpp
+    src/client/devices.cpp
+    src/client/roster.cpp
+    src/client/session.cpp
+    src/client/ui.cpp
+    src/client/videoview.cpp
     res/host.rc
 )
 target_include_directories(HyperlinkHost PRIVATE src "${FFMPEG_DIR}/include")
@@ -28,7 +33,7 @@ configure_file(res/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 target_include_directories(HyperlinkHost PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(HyperlinkHost PRIVATE
     hyperlink_core avcodec avutil
-    d3d11 dxgi avrt winmm winhttp bcrypt comctl32 shell32 user32 gdi32 ole32 shcore)
+    d3d11 dxgi uuid avrt winmm winhttp bcrypt comctl32 shell32 user32 gdi32 ole32 shcore)
 if(MSVC)
     target_compile_options(HyperlinkHost PRIVATE /W3)
     target_link_options(HyperlinkHost PRIVATE /MANIFEST:NO)

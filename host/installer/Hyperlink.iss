@@ -29,22 +29,22 @@ CloseApplications=yes
 RestartApplications=no
 
 [Tasks]
-Name: "autostart"; Description: "Start Hyperlink Host when I sign in (runs with admin rights so it can control admin windows)"; Flags: checkedonce
+Name: "autostart"; Description: "Start Hyperlink when I sign in, so other devices can connect to this PC (runs with admin rights so it can control admin windows)"; Flags: checkedonce
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 [Icons]
-Name: "{group}\Hyperlink Host"; Filename: "{app}\HyperlinkHost.exe"
-Name: "{autodesktop}\Hyperlink Host"; Filename: "{app}\HyperlinkHost.exe"; Tasks: desktopicon
+Name: "{group}\Hyperlink"; Filename: "{app}\HyperlinkHost.exe"
+Name: "{autodesktop}\Hyperlink"; Filename: "{app}\HyperlinkHost.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Hyperlink Host"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Hyperlink Host"" dir=in action=allow program=""{app}\HyperlinkHost.exe"" enable=yes profile=any"; Flags: runhidden
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Hyperlink Host"" /F"; Flags: runhidden
-Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""Hyperlink Host"" /TR ""\""{app}\HyperlinkHost.exe\"""" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Tasks: autostart
-Filename: "{app}\HyperlinkHost.exe"; Description: "Start Hyperlink Host"; Flags: nowait postinstall
+Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""Hyperlink Host"" /TR ""\""{app}\HyperlinkHost.exe\"" --background"" /SC ONLOGON /RL HIGHEST /F"; Flags: runhidden; Tasks: autostart
+Filename: "{app}\HyperlinkHost.exe"; Description: "Open Hyperlink"; Flags: nowait postinstall
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM HyperlinkHost.exe /F"; Flags: runhidden; RunOnceId: "KillHost"

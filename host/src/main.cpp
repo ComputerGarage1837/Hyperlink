@@ -18,6 +18,12 @@
 #include "server.h"
 #include "settings.h"
 #include "updater.h"
+#include "client/roster.h"
+#include "client/videoview.h"
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 namespace {
 
@@ -29,10 +35,12 @@ enum : UINT {
     WM_APP_UPDATE_PROGRESS, // wParam: percent
     WM_APP_UPDATE_READY,    // lParam: std::wstring* installer path
     WM_APP_UPDATE_FAILED,   // lParam: std::string* error
+    WM_APP_OPEN,            // another launch asked us to show the device list
 };
 
 enum : UINT {
     ID_TRAY = 1,
+    IDM_OPEN = 99,
     IDM_SETTINGS = 100,
     IDM_UPDATES,
     IDM_LOG,
@@ -282,13 +290,15 @@ void showMenu() {
     auto s = gServer->settings();
     auto st = gServer->status();
     HMENU m = CreatePopupMenu();
-    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Hyperlink Host " + W(hostVersion())).c_str());
+    AppendMenuW(m, MF_STRING | MF_DEFAULT, IDM_OPEN, L"Open Hyperlink (devices)");
+    AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Hyperlink " + W(hostVersion())).c_str());
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Name: " + W(s.name)).c_str());
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"PIN: " + (s.pin.empty() ? L"none" : W(s.pin))).c_str());
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Address: " + W(addressesText())).c_str());
     for (auto& c : st.clients) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, (L"Connected: " + W(c)).c_str());
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, IDM_SETTINGS, L"Settings...");
+    AppendMenuW(m, MF_STRING, IDM_SETTINGS, L"This PC's name and PIN...");
     AppendMenuW(m, MF_STRING, IDM_UPDATES, L"Check for updates");
     AppendMenuW(m, MF_STRING, IDM_LOG, L"Open log");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
@@ -309,7 +319,7 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_APP_TRAY:
             switch (LOWORD(lp)) {
-                case WM_LBUTTONDBLCLK: showSettings(); break;
+                case WM_LBUTTONDBLCLK: roster::show(); break;
                 case WM_RBUTTONUP:
                 case WM_CONTEXTMENU: showMenu(); break;
                 case NIN_BALLOONUSERCLICK: checkForUpdates(true); break;
@@ -317,6 +327,7 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_COMMAND:
             switch (LOWORD(wp)) {
+                case IDM_OPEN: roster::show(); break;
                 case IDM_SETTINGS: showSettings(); break;
                 case IDM_UPDATES: showSettings(); checkForUpdates(true); break;
                 case IDM_LOG: ShellExecuteW(nullptr, L"open", (dataDir() + L"\\host.log").c_str(), nullptr,
@@ -326,6 +337,9 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_APP_STATUS:
             refreshStatus();
+            return 0;
+        case WM_APP_OPEN:
+            roster::show();
             return 0;
         case WM_APP_UPDATE_FOUND:
             if (!wp) {  // found by the startup check: don't pop a dialog, just tell
@@ -398,6 +412,8 @@ static int selfTest(const wchar_t* path) {
                           "av1_nvenc", "av1_amf", "av1_qsv"})
         fprintf(f, "%s %s\n", n, Encoder::available(n) ? "yes" : "no");
     fprintf(f, "monitors %d\n", (int)enumerateMonitors().size());
+    for (const char* n : {"h264", "hevc", "av1"})
+        fprintf(f, "decoder %s %s\n", n, avcodec_find_decoder_by_name(n) ? "yes" : "no");
     fprintf(f, "ok\n");
     fclose(f);
     return 0;
@@ -409,14 +425,20 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argc >= 3 && wcscmp(argv[1], L"--selftest") == 0) return selfTest(argv[2]);
     (void)cmd;
+    bool background = false;
+    for (int i = 1; i < argc; i++)
+        if (wcscmp(argv[i], L"--background") == 0) background = true;
     HANDLE single = CreateMutexW(nullptr, TRUE, L"Local\\HyperlinkHost");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        MessageBoxW(nullptr, L"Hyperlink Host is already running. Look for its icon in the tray.",
-                    L"Hyperlink Host", MB_ICONINFORMATION);
+        // Already running (probably in the tray): just bring up its device list.
+        if (HWND other = FindWindowExW(HWND_MESSAGE, nullptr, L"HyperlinkHostMsg", nullptr)) {
+            AllowSetForegroundWindow(ASFW_ANY);
+            PostMessageW(other, WM_APP_OPEN, 0, 0);
+        }
         return 0;
     }
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES};
+    INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_LISTVIEW_CLASSES};
     InitCommonControlsEx(&icc);
     timeBeginPeriod(1);
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
@@ -446,6 +468,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     sc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(IDI_APP));
     sc.lpszClassName = L"HyperlinkSettings";
     RegisterClassExW(&sc);
+    roster::Hooks hooks;
+    hooks.openHostSettings = [] { showSettings(); };
+    hooks.checkForUpdates = [] { checkForUpdates(true); };
+    hooks.thisPcSummary = [] {
+        auto st = gServer->settings();
+        return st.name + "   \u00B7   PIN " + (st.pin.empty() ? std::string("none") : st.pin);
+    };
+    hooks.thisHostId = [] { return gServer->settings().hostId; };
+    roster::registerClasses(inst, hooks);
     gMsgWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
 
     gNid.cbSize = sizeof gNid;
@@ -465,6 +496,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     auto settings = gServer->settings();
     bool firstRun = GetFileAttributesW((dataDir() + L"\\shown-welcome").c_str()) == INVALID_FILE_ATTRIBUTES;
+    if (!background) roster::show();
     if (firstRun) {
         CloseHandle(CreateFileW((dataDir() + L"\\shown-welcome").c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                 0, nullptr));
