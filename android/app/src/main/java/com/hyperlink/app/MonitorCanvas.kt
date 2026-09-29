@@ -69,6 +69,54 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
     private val gap = (6 * resources.displayMetrics.density)
     private val rects = HashMap<Int, RectF>()
 
+    /** Monitors the user chose not to show. */
+    var hidden: Set<Int> = emptySet()
+        set(v) { field = v; resetZoom() }
+
+    // Pinch zoom and pan, applied on top of the fitted layout.
+    var zoom = 1f
+        private set
+    private var panX = 0f
+    private var panY = 0f
+    /** True while fingers are zooming/panning: streams aren't resized mid-gesture. */
+    var gestureActive = false
+    private val base = HashMap<Int, RectF>()
+
+    fun resetZoom() {
+        zoom = 1f; panX = 0f; panY = 0f
+        requestLayout()
+    }
+
+    /** Zooms by [factor] keeping the point (fx, fy) under the fingers still. */
+    fun zoomBy(factor: Float, fx: Float, fy: Float) {
+        val nz = (zoom * factor).coerceIn(1f, 5f)
+        val cx = (fx - panX) / zoom
+        val cy = (fy - panY) / zoom
+        zoom = nz
+        panX = fx - cx * nz
+        panY = fy - cy * nz
+        requestLayout()
+    }
+
+    fun panBy(dx: Float, dy: Float) {
+        if (zoom <= 1f) return
+        panX += dx; panY += dy
+        requestLayout()
+    }
+
+    /** Pans so a point (in view coordinates) stays inside the screen with a margin. */
+    fun keepVisible(x: Float, y: Float) {
+        if (zoom <= 1f) return
+        val m = min(width, height) * 0.12f
+        var dx = 0f
+        var dy = 0f
+        if (x < m) dx = m - x else if (x > width - m) dx = (width - m) - x
+        if (y < m) dy = m - y else if (y > height - m) dy = (height - m) - y
+        if (dx != 0f || dy != 0f) panBy(dx, dy)
+    }
+
+    private fun visibleMonitors() = tiles.values.map { it.monitor }.filter { it.id !in hidden }
+
     interface SurfaceListener {
         fun onSurfaceReady(tile: MonitorTile, holder: SurfaceHolder)
         fun onSurfaceGone(tile: MonitorTile)
@@ -102,12 +150,12 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
 
     fun showAll() {
         focusedId = null
-        requestLayout()
+        resetZoom()
     }
 
     fun focus(monitorId: Int) {
         focusedId = monitorId
-        requestLayout()
+        resetZoom()
     }
 
     val isAll get() = focusedId == null
@@ -160,7 +208,7 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
                 tile.visibility = VISIBLE
                 tile.layout(rect.left.roundToInt(), rect.top.roundToInt(),
                     rect.left.roundToInt() + tile.measuredWidth, rect.top.roundToInt() + tile.measuredHeight)
-                tile.setDecorations(showLabel = isAll && tiles.size > 1, highlighted = false)
+                tile.setDecorations(showLabel = isAll && rects.size > 1, highlighted = false)
             }
         }
         onLayoutChanged?.invoke()
@@ -168,18 +216,42 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
 
     private fun computeRects(w: Float, h: Float) {
         rects.clear()
+        computeBase(w, h)
+        if (base.isEmpty()) return
+        // Apply zoom and pan, keeping the picture covering the screen (or centred if smaller).
+        val u = RectF(base.values.first())
+        base.values.forEach { u.union(it) }
+        fun clampAxis(pan: Float, lo: Float, hi: Float, size: Float): Float {
+            val len = (hi - lo) * zoom
+            return if (len <= size) (size - len) / 2 - lo * zoom
+            else pan.coerceIn(size - hi * zoom, -lo * zoom)
+        }
+        if (zoom <= 1f) { panX = 0f; panY = 0f } else {
+            panX = clampAxis(panX, u.left, u.right, w)
+            panY = clampAxis(panY, u.top, u.bottom, h)
+        }
+        val tx = if (zoom <= 1f) 0f else panX
+        val ty = if (zoom <= 1f) 0f else panY
+        for ((id, r) in base) {
+            rects[id] = RectF(r.left * zoom + tx, r.top * zoom + ty, r.right * zoom + tx, r.bottom * zoom + ty)
+        }
+    }
+
+    private fun computeBase(w: Float, h: Float) {
+        base.clear()
         if (w <= 0 || h <= 0 || tiles.isEmpty()) return
+        val visible = visibleMonitors().ifEmpty { tiles.values.map { it.monitor } }
         val focused = focusedId?.let { tiles[it] }
-        if (focused != null || tiles.size == 1) {
-            val m = (focused ?: tiles.values.first()).monitor
+        if (focused != null || visible.size == 1) {
+            val m = focused?.monitor ?: visible.first()
             val s = min(w / m.width, h / m.height)
             val tw = m.width * s
             val th = m.height * s
-            rects[m.id] = RectF((w - tw) / 2, (h - th) / 2, (w + tw) / 2, (h + th) / 2)
+            base[m.id] = RectF((w - tw) / 2, (h - th) / 2, (w + tw) / 2, (h + th) / 2)
             return
         }
-        // All monitors, in their real arrangement, scaled to fit with a small gap between them.
-        val ms = tiles.values.map { it.monitor }
+        // Chosen monitors, in their real arrangement, scaled to fit with a small gap between them.
+        val ms = visible
         val minX = ms.minOf { it.x }.toFloat()
         val minY = ms.minOf { it.y }.toFloat()
         val maxX = ms.maxOf { it.x + it.width }.toFloat()
@@ -191,7 +263,7 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
         for (m in ms) {
             val left = ox + (m.x - minX) * s
             val top = oy + (m.y - minY) * s
-            rects[m.id] = RectF(left + gap / 2, top + gap / 2, left + m.width * s - gap / 2, top + m.height * s - gap / 2)
+            base[m.id] = RectF(left + gap / 2, top + gap / 2, left + m.width * s - gap / 2, top + m.height * s - gap / 2)
         }
     }
 

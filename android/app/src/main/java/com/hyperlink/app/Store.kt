@@ -92,6 +92,14 @@ class Settings(ctx: Context) {
     var startWithAllMonitors: Boolean
         get() = p.getBoolean("allMonitors", true)
         set(v) = p.edit().putBoolean("allMonitors", v).apply()
+    /** Turn to landscape while connected (PC screens are wide). */
+    var lockLandscape: Boolean
+        get() = p.getBoolean("lockLandscape", true)
+        set(v) = p.edit().putBoolean("lockLandscape", v).apply()
+    fun hiddenScreens(deviceId: String): Set<Int> =
+        (p.getString("hidden.$deviceId", "") ?: "").split(",").mapNotNull { it.toIntOrNull() }.toSet()
+    fun setHiddenScreens(deviceId: String, ids: Set<Int>) =
+        p.edit().putString("hidden.$deviceId", ids.joinToString(",")).apply()
     var showStats: Boolean
         get() = p.getBoolean("stats", false)
         set(v) = p.edit().putBoolean("stats", v).apply()

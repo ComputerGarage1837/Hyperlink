@@ -79,6 +79,7 @@ class SettingsActivity : AppCompatActivity() {
             listOf(1 to "A touchpad (move the pointer)", 0 to "A touch screen (tap where you click)")) { s.trackpad = it == 1 }
         choice("Touchpad speed", (s.trackpadSpeed * 10).roundToInt(),
             listOf(8 to "Slow", 12 to "Medium", 16 to "Normal", 22 to "Fast", 30 to "Very fast")) { s.trackpadSpeed = it / 10f }
+        toggle("Turn to landscape while connected", s.lockLandscape) { s.lockLandscape = it }
         toggle("Show performance stats", s.showStats) { s.showStats = it }
         text("This device's name", s.clientName) { s.clientName = it }
 

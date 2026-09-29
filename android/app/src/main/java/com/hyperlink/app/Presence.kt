@@ -99,6 +99,34 @@ class Presence(private val ctx: Context, private val onUpdate: (Map<String, Host
 
     companion object {
         const val PORT = 47802
+
+        /**
+         * Finds a host's current address by its permanent id (LAN broadcast). Blocking.
+         * This is how saved devices survive router changes and new DHCP addresses.
+         */
+        fun locate(hostId: String, timeoutMs: Long = 900): String? {
+            if (hostId.isEmpty()) return null
+            val socket = runCatching { DatagramSocket().apply { broadcast = true; soTimeout = 150 } }.getOrNull() ?: return null
+            val query = QUERY.toByteArray()
+            val buf = ByteArray(1024)
+            val start = System.currentTimeMillis()
+            var lastSend = 0L
+            try {
+                while (System.currentTimeMillis() - start < timeoutMs) {
+                    if (System.currentTimeMillis() - lastSend > 300) {
+                        runCatching { socket.send(DatagramPacket(query, query.size, InetAddress.getByName("255.255.255.255"), PORT)) }
+                        lastSend = System.currentTimeMillis()
+                    }
+                    val pkt = DatagramPacket(buf, buf.size)
+                    try { socket.receive(pkt) } catch (_: Exception) { continue }
+                    val p = parse(pkt.data, pkt.length, pkt.address.hostAddress ?: continue) ?: continue
+                    if (p.hostId == hostId) return p.address
+                }
+            } finally {
+                socket.close()
+            }
+            return null
+        }
         private const val QUERY = "HYPERLINK?1"
         private const val REPLY = "HYPERLINK!1"
 

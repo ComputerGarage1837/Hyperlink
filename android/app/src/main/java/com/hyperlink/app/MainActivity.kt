@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         settings = Settings(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        presence = Presence(this) { found = it; followMovedHosts(); refresh() }
+        presence = Presence(this) { found = it; refresh() }
 
         val root = FrameLayout(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        presence.targets = DeviceStore.all(this).map { it.address }
+        presence.targets = DeviceStore.all(this).map { it.address }.filter { it.isNotEmpty() }
         presence.start()
         refresh()
     }
@@ -129,18 +129,6 @@ class MainActivity : AppCompatActivity() {
             setOnClickListener { onClick() }
         }
 
-    /** A saved host that moved to another IP (DHCP) is found again by its host id. */
-    private fun followMovedHosts() {
-        for (d in DeviceStore.all(this)) {
-            if (d.hostId.isEmpty()) continue
-            val p = found.values.firstOrNull { it.hostId == d.hostId } ?: continue
-            if (p.address != d.address && presence.find(found, d.address, "") == null) {
-                DeviceStore.save(this, d.copy(address = p.address))
-            }
-        }
-        presence.targets = DeviceStore.all(this).map { it.address }
-    }
-
     private fun refresh() {
         val saved = DeviceStore.all(this)
         val rows = mutableListOf<Row>(Row.Header("My devices"))
@@ -169,7 +157,7 @@ class MainActivity : AppCompatActivity() {
             return til to et
         }
         val (nameL, name) = field("Name (anything you like)", existing?.name ?: from?.name ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
-        val (addrL, addr) = field("Address (IP or host name)", existing?.address ?: from?.address ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val (addrL, addr) = field("Fallback address (optional: Tailscale or host name)", existing?.address ?: "", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val (pinL, pin) = field("PIN (shown on the PC)", existing?.pin ?: "", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD)
         pinL.endIconMode = TextInputLayout.END_ICON_PASSWORD_TOGGLE
         val box = LinearLayout(this).apply {
@@ -185,18 +173,20 @@ class MainActivity : AppCompatActivity() {
             .show()
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
             val a = addr.text.toString().trim()
-            val n = name.text.toString().trim().ifEmpty { a }
-            if (a.isEmpty()) {
-                addrL.error = "Enter the PC's address"
+            val n = name.text.toString().trim().ifEmpty { from?.name ?: a }
+            val knownId = existing?.hostId?.isNotEmpty() == true || from != null
+            if (a.isEmpty() && !knownId) {
+                addrL.error = "Pick it from Found on your network, or enter an address"
                 return@setOnClickListener
             }
-            val (host, port) = a.split(":").let { it[0] to (it.getOrNull(1)?.toIntOrNull() ?: NativeClient.DEFAULT_PORT) }
+            val (host, port) = if (a.isEmpty()) "" to NativeClient.DEFAULT_PORT
+                else a.split(":").let { it[0] to (it.getOrNull(1)?.toIntOrNull() ?: NativeClient.DEFAULT_PORT) }
             val d = (existing ?: SavedDevice(name = n, address = host)).copy(
                 name = n, address = host, port = port, pin = pin.text.toString().trim(),
-                hostId = existing?.let { if (it.address == host) it.hostId else null } ?: from?.hostId ?: "",
+                hostId = from?.hostId ?: existing?.hostId ?: "",
             )
             DeviceStore.save(this, d)
-            presence.targets = DeviceStore.all(this).map { it.address }
+            presence.targets = DeviceStore.all(this).map { it.address }.filter { it.isNotEmpty() }
             dialog.dismiss()
             refresh()
         }
@@ -300,9 +290,9 @@ class MainActivity : AppCompatActivity() {
         col.addView(top)
         col.addView(TextView(this).apply {
             text = buildString {
-                append(d.address)
-                if (d.port != NativeClient.DEFAULT_PORT) append(":${d.port}")
-                if (p != null) append("  ·  ${p.name}  ·  v${p.version}")
+                if (p != null) append("${p.name}  ·  v${p.version}  ·  found on this network")
+                else if (d.address.isNotEmpty()) append("Fallback: ${d.address}")
+                else append("Found automatically when it's on your network")
             }
             setTextColor(0xFFB8C0E6.toInt())
         })

@@ -112,6 +112,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         }
         device = d
         requestedMonitor = intent.getIntExtra(EXTRA_MONITOR, -1)
+        if (settings.lockLandscape) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setupWindow()
         buildUi()
         setTaskDescription(android.app.ActivityManager.TaskDescription(device.name))
@@ -172,7 +173,13 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         cursor = CursorOverlay(this).apply { canvasView = canvas }
         root.addView(cursor, FrameLayout.LayoutParams(-1, -1))
 
-        touch = TouchInput(canvas, { if (connected) client else null }, settings) { toggleToolbar() }
+        touch = TouchInput(canvas, { if (connected) client else null }, settings,
+            onThreeFingerTap = { toggleToolbar() },
+            onTwoFingerDoubleTap = { x, y ->
+                if (canvas.isAll) canvas.hit(x, y)?.let { canvas.focus(it.first.id) } else canvas.showAll()
+                if (toolbar.visibility == View.VISIBLE) rebuildToolbar()
+            },
+            onZoomEnd = { syncStreams() })
         canvas.setOnTouchListener { _, e ->
             if (e.actionMasked == MotionEvent.ACTION_DOWN && toolbar.visibility == View.VISIBLE &&
                 e.getToolType(0) != MotionEvent.TOOL_TYPE_MOUSE) showToolbar(false)
@@ -281,6 +288,8 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
                 })
             }
         }
+        if (monitors.size > 1) toolbarRow.addView(button("Show/hide screens") { chooseScreens() })
+        if (canvas.zoom > 1f) toolbarRow.addView(button("Fit to screen") { canvas.resetZoom(); rebuildToolbar() })
         toolbarRow.addView(button("New window") { openNewWindow() })
         toolbarRow.addView(button("Keyboard") { keyInput.toggleKeyboard() })
         toolbarRow.addView(button("Keys") { keysBar.visibility = if (keysBar.visibility == View.VISIBLE) View.GONE else View.VISIBLE })
@@ -355,6 +364,25 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         buttons.forEachIndexed { i, (label, action) -> overlayButtons.addView(button(label, filled = i == 0) { action() }) }
     }
 
+    private fun chooseScreens() {
+        val names = monitors.mapIndexed { i, m -> "${i + 1}  ${m.name}  (${m.width}×${m.height})" }.toTypedArray()
+        val hidden = settings.hiddenScreens(device.id).toMutableSet()
+        val checked = BooleanArray(monitors.size) { monitors[it].id !in hidden }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Screens to show")
+            .setMultiChoiceItems(names, checked) { _, which, on -> checked[which] = on }
+            .setPositiveButton("Show") { _, _ ->
+                val newHidden = monitors.filterIndexed { i, _ -> !checked[i] }.map { it.id }.toSet()
+                if (newHidden.size == monitors.size) return@setPositiveButton  // keep at least one
+                settings.setHiddenScreens(device.id, newHidden)
+                canvas.hidden = newHidden
+                canvas.focusedId?.let { if (it in newHidden) canvas.showAll() }
+                rebuildToolbar()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun openNewWindow() {
         if (monitors.size <= 1) {
             SessionActivity.open(this, device.id, -1)
@@ -391,7 +419,19 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         val mask = deviceCodecMask()
         val hz = maxDisplayHz().roundToInt()
         thread(name = "connect") {
-            val err = c.connect(device.address, device.port, name, id, device.pin, dm.widthPixels, dm.heightPixels, hz, mask)
+            // Find the PC by its permanent id first; the saved address is only a fallback
+            // (e.g. a Tailscale name when away from home).
+            val found = Presence.locate(device.hostId)
+            val address = found ?: device.address
+            if (address.isEmpty()) {
+                runOnUiThread {
+                    showOverlay("Can't find ${device.name} on this network.\n\nIs it switched on and running Hyperlink? " +
+                        "To connect from elsewhere, add a fallback address (such as its Tailscale name) in Edit.",
+                        false, "Try again" to { connect() }, "Close" to { finish() })
+                }
+                return@thread
+            }
+            val err = c.connect(address, device.port, name, id, device.pin, dm.widthPixels, dm.heightPixels, hz, mask)
             runOnUiThread {
                 if (isDestroyed || client !== c) return@runOnUiThread
                 if (err == null) {
@@ -448,17 +488,23 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         this.monitors = monitors
         monitors.forEachIndexed { i, m -> slots[m.id] = Slot(m, i) }
         canvas.setMonitors(monitors)
+        canvas.hidden = settings.hiddenScreens(device.id).filter { id -> monitors.any { it.id == id } }.toSet()
         when {
             requestedMonitor >= 0 && monitors.any { it.id == requestedMonitor } -> canvas.focus(requestedMonitor)
             settings.startWithAllMonitors || monitors.size == 1 -> canvas.showAll()
             else -> canvas.focus((monitors.firstOrNull { it.primary } ?: monitors.first()).id)
         }
-        rebuildToolbar()
+        showToolbar(true)
+        root.postDelayed({ if (connected) showToolbar(false) }, 5000)
+        android.widget.Toast.makeText(this, "Pinch to zoom · two-finger double-tap switches screens · three-finger tap shows the menu",
+            android.widget.Toast.LENGTH_LONG).show()
     }
 
     override fun onStreamStarted(streamId: Int, monitorId: Int, width: Int, height: Int, fps: Int, codec: Int, encoder: String) =
         runOnUiThread {
             slots[monitorId]?.info = "${width}x$height ${NativeClient.codecName(codec)} $fps fps · $encoder"
+            // Keep the surface buffer at the video's size; the display scales it, so zooming is free.
+            canvas.tiles[monitorId]?.surface?.holder?.setFixedSize(width, height)
         }
 
     override fun onStreamError(streamId: Int, message: String) = runOnUiThread {
@@ -472,7 +518,12 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         runOnUiThread { cursor.setShape(width, height, hotX, hotY, argb) }
 
     override fun onCursorPos(monitorId: Int, x: Int, y: Int, visible: Boolean) =
-        runOnUiThread { cursor.setPosition(monitorId, x, y, visible) }
+        runOnUiThread {
+            cursor.setPosition(monitorId, x, y, visible)
+            if (visible && canvas.zoom > 1f) canvas.rectOf(monitorId)?.let { r ->
+                canvas.keepVisible(r.left + x / 65535f * r.width(), r.top + y / 65535f * r.height())
+            }
+        }
 
     override fun onDisconnected(reason: String) = runOnUiThread {
         connected = false
@@ -514,7 +565,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
     /** Starts, resizes or stops streams to match what's on screen. */
     private fun syncStreams() {
         val c = client ?: return
-        if (!connected || !visibleToUser) return
+        if (!connected || !visibleToUser || canvas.gestureActive) return
         val showing = slots.values.filter { canvas.rectOf(it.monitor.id) != null && it.surface != null }
         val totalArea = showing.sumOf { r -> canvas.rectOf(r.monitor.id)!!.let { (it.width() * it.height()).toDouble() } }
         for (slot in slots.values) {
@@ -530,6 +581,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             var w = rect.width().roundToInt()
             var h = rect.height().roundToInt()
             when {
+                canvas.zoom > 1f -> { w = 0; h = 0 }                              // zoomed in: full detail
                 settings.maxHeight < 0 && !canvas.isAll -> { w = 0; h = 0 }        // native resolution
                 settings.maxHeight > 0 && !canvas.isAll -> { w = 16384; h = settings.maxHeight }
             }

@@ -5,6 +5,7 @@ import android.os.Looper
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sqrt
 
@@ -22,6 +23,10 @@ class TouchInput(
     private val client: () -> NativeClient?,
     private val settings: Settings,
     private val onThreeFingerTap: () -> Unit,
+    /** Two-finger double tap at a point: switch between all screens and the one under it. */
+    private val onTwoFingerDoubleTap: (Float, Float) -> Unit = { _, _ -> },
+    /** A pinch/zoom gesture finished: good moment to re-fit the streams. */
+    private val onZoomEnd: () -> Unit = {},
 ) {
     private val slop = ViewConfiguration.get(canvas.context).scaledTouchSlop.toFloat()
     private val handler = Handler(Looper.getMainLooper())
@@ -44,6 +49,13 @@ class TouchInput(
     private var relRemX = 0f
     private var relRemY = 0f
     private var mouseButtons = 0
+    private var pinching = false
+    private var lastDist = 0f
+    private var startDist = 0f
+    private var tapX = 0f
+    private var tapY = 0f
+    private var lastTwoTapUp = 0L
+    private val pendingRightClick = Runnable { click(NativeClient.MOUSE_RIGHT) }
 
     private val longPress = Runnable {
         if (!moved && maxPointers == 1) {
@@ -72,7 +84,9 @@ class TouchInput(
                 handler.removeCallbacks(longPress)
                 if (dragging) { c.mouseButton(NativeClient.MOUSE_LEFT, false); dragging = false }
                 lastX = centroidX(e); lastY = centroidY(e)
+                tapX = lastX; tapY = lastY
                 scrollRemX = 0f; scrollRemY = 0f
+                startDist = spread(e); lastDist = startDist
             }
             MotionEvent.ACTION_POINTER_UP -> {
                 // Re-anchor on the remaining fingers so nothing jumps.
@@ -82,8 +96,19 @@ class TouchInput(
                 if (e.pointerCount >= 2) {
                     val cx = centroidX(e)
                     val cy = centroidY(e)
-                    if (!scrolling && hypot(cx - lastX, cy - lastY) > slop / 2) scrolling = true
-                    if (scrolling) {
+                    val dist = spread(e)
+                    if (!scrolling && !pinching && e.pointerCount == 2 && abs(dist - startDist) > slop * 1.5f) {
+                        pinching = true
+                        moved = true
+                        canvas.gestureActive = true
+                    }
+                    if (!scrolling && !pinching && hypot(cx - lastX, cy - lastY) > slop / 2) scrolling = true
+                    if (pinching) {
+                        // Pinch zooms the picture on this device; moving the fingers pans it.
+                        if (lastDist > 0f && dist > 0f) canvas.zoomBy(dist / lastDist, cx, cy)
+                        canvas.panBy(cx - lastX, cy - lastY)
+                        lastDist = dist
+                    } else if (scrolling) {
                         moved = true
                         // Natural scrolling: content follows the fingers. Sent in 1/120-notch units.
                         scrollRemY += (cy - lastY) * 4f / density
@@ -127,11 +152,26 @@ class TouchInput(
                             click(NativeClient.MOUSE_LEFT)
                             lastTapUp = e.eventTime
                         }
-                        2 -> click(NativeClient.MOUSE_RIGHT)
+                        2 -> {
+                            // Wait briefly: a second two-finger tap means "switch screens", not right-click.
+                            if (e.eventTime - lastTwoTapUp < 350) {
+                                handler.removeCallbacks(pendingRightClick)
+                                lastTwoTapUp = 0
+                                onTwoFingerDoubleTap(tapX, tapY)
+                            } else {
+                                lastTwoTapUp = e.eventTime
+                                handler.postDelayed(pendingRightClick, 300)
+                            }
+                        }
                         else -> onThreeFingerTap()
                     }
                 }
                 if (maxPointers > 1) lastTapUp = 0
+                if (pinching) {
+                    pinching = false
+                    canvas.gestureActive = false
+                    onZoomEnd()
+                }
             }
         }
         return true
@@ -197,6 +237,9 @@ class TouchInput(
             relRemX -= ix; relRemY -= iy
         }
     }
+
+    private fun spread(e: MotionEvent): Float =
+        if (e.pointerCount < 2) 0f else hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
 
     private fun centroidX(e: MotionEvent, skip: Int = -1): Float {
         var s = 0f; var n = 0

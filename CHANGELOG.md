@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.1 — 2026-09-29
+
+- **Pinch to zoom** any screen (up to 5×) and drag with two fingers while pinching to move
+  around. When zoomed, the PC sends full resolution so text stays sharp, and the view follows the
+  pointer.
+- **Show/hide screens**: choose which of the PC's monitors appear (remembered per device).
+- **Switch screens faster**: two-finger double-tap toggles between all screens and the one under
+  your fingers. The menu shows for a few seconds when you connect.
+- Turns to landscape while connected (can be switched off in Settings).
+- Devices are found by their permanent id instead of their IP address, so router changes and new
+  addresses don't matter. The address field is now an optional fallback for connecting from
+  elsewhere (e.g. a Tailscale name).
+
 ## v0.1.0 — 2026-09-29
 
 First version.
