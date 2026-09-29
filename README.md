@@ -83,6 +83,15 @@ cmake -S . -B build -A x64 -DFFMPEG_DIR=C:/ffmpeg && cmake --build build --confi
 cd android && ./gradlew assembleRelease
 ```
 
-The Android signing key (`android/hyperlink-release.jks`, password `hyperlink`) is in the
-repository on purpose so every build can update the last one. It's fine for personal use; set
-`HYPERLINK_KEYSTORE*` environment variables to use your own.
+Release APKs are signed with a private key kept in the repository secrets
+(`HYPERLINK_KEYSTORE_BASE64`, `HYPERLINK_KEYSTORE_PASSWORD`, `HYPERLINK_KEY_ALIAS`,
+`HYPERLINK_KEY_PASSWORD`). Keep a backup of the keystore: Android only installs an update
+signed with the same key. Builds without the secrets (branches, pull requests) use a debug key.
+
+## Hardware
+
+The host picks the best encoder the PC has, in this order: NVIDIA NVENC, AMD AMF, Intel Quick
+Sync, then software x264, so swapping graphics cards needs no settings change. The phone app asks
+Android which decoders it has and uses HEVC or AV1 when both sides support it, else H.264. It
+turns on the low-latency modes of Qualcomm (Snapdragon), Samsung Exynos, MediaTek and Kirin
+decoders.

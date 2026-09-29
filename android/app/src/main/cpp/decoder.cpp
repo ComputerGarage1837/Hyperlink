@@ -103,11 +103,7 @@ bool Decoder::start(ANativeWindow* window, uint8_t codec, int width, int height,
         codec_ = nullptr;
         return false;
     }
-    char* name = nullptr;
-    if (AMediaCodec_getName(codec_, &name) == AMEDIA_OK && name) {
-        hl::log("decoder: %s %dx%d", name, width, height);
-        AMediaCodec_releaseName(codec_, name);
-    }
+    hl::log("decoder: %s %dx%d started", mime, width, height);
     stop_ = false;
     failed_ = false;
     output_ = std::thread([this] { outputLoop(); });

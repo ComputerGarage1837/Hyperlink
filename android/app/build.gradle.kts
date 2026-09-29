@@ -33,25 +33,24 @@ android {
         }
     }
 
-    // Every build is signed with the same key so updates install over each other.
-    // The key is in the repo on purpose (personal project); swap in your own via the
-    // HYPERLINK_KEYSTORE* environment variables if you ever want to.
+    // Release builds are signed with your private key, supplied by CI from repository
+    // secrets (HYPERLINK_KEYSTORE, _PASSWORD, _KEY_ALIAS, _KEY_PASSWORD). Without them the
+    // build falls back to the debug key, which is fine for testing but can't update a release.
+    val keystore = System.getenv("HYPERLINK_KEYSTORE")?.takeIf { it.isNotBlank() && file(it).exists() }
     signingConfigs {
-        create("release") {
-            storeFile = file(System.getenv("HYPERLINK_KEYSTORE") ?: "../hyperlink-release.jks")
-            storePassword = System.getenv("HYPERLINK_KEYSTORE_PASSWORD") ?: "hyperlink"
-            keyAlias = System.getenv("HYPERLINK_KEY_ALIAS") ?: "hyperlink"
-            keyPassword = System.getenv("HYPERLINK_KEY_PASSWORD") ?: "hyperlink"
+        if (keystore != null) create("release") {
+            storeFile = file(keystore)
+            storePassword = System.getenv("HYPERLINK_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("HYPERLINK_KEY_ALIAS")
+            keyPassword = System.getenv("HYPERLINK_KEY_PASSWORD")
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
-        }
-        debug {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (keystore != null) signingConfigs.getByName("release")
+                            else signingConfigs.getByName("debug")
         }
     }
 

@@ -58,8 +58,26 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+      # Release builds are signed with your private key from the repository secrets.
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.HYPERLINK_KEYSTORE_BASE64 }}
+          PUBLISH: ${{ needs.version.outputs.publish }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hyperlink.jks"
+            echo "HYPERLINK_KEYSTORE=$RUNNER_TEMP/hyperlink.jks" >> "$GITHUB_ENV"
+          elif [ "$PUBLISH" = "true" ]; then
+            echo "::error::Add the HYPERLINK_KEYSTORE_BASE64 secret before publishing a release."; exit 1
+          else
+            echo "::warning::No signing secret: this test build uses a throwaway debug key."
+          fi
       - name: Build APK
         working-directory: android
+        env:
+          HYPERLINK_KEYSTORE_PASSWORD: ${{ secrets.HYPERLINK_KEYSTORE_PASSWORD }}
+          HYPERLINK_KEY_ALIAS: ${{ secrets.HYPERLINK_KEY_ALIAS }}
+          HYPERLINK_KEY_PASSWORD: ${{ secrets.HYPERLINK_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
@@ -100,7 +118,7 @@ jobs:
 
       - name: Configure & build
         run: |
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DFFMPEG_DIR="$FFMPEG_DIR"
+          cmake -S . -B build -A x64 -DFFMPEG_DIR="$FFMPEG_DIR"
           cmake --build build --config Release -j 4
 
       - name: Core tests (Windows)
