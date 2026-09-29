@@ -17,7 +17,8 @@ struct SavedDevice {
     std::string id;          // local id for this entry
     std::string name;        // the user's name for it
     std::string hostId;      // the host's permanent id (empty until first seen/connected)
-    std::string address;     // optional fallback: host name, Tailscale name or IP
+    std::string address;     // optional fallback the user typed: host name, Tailscale name or IP
+    std::string remoteAddress;  // the host's Tailscale address, learned automatically
     uint16_t port = hl::kControlPort;
     std::string pin;
 };

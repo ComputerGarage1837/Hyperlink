@@ -185,11 +185,19 @@ static void testDiscovery() {
     DiscoveryReply d;
     d.hostId = "abc"; d.hostName = "Gaming PC"; d.version = "0.1.0"; d.pinRequired = 1;
     d.clients = 2; d.streams = 3;
+    d.remoteAddresses = {"100.101.102.103"};
     auto b = d.encode();
     DiscoveryReply e;
     CHECK(e.decode(b.data(), b.size()));
     CHECK(e.hostName == "Gaming PC" && e.clients == 2 && e.streams == 3 && e.pinRequired == 1);
     CHECK(!e.decode(b.data(), 5));
+    CHECK(e.remoteAddresses.size() == 1 && e.remoteAddresses[0] == "100.101.102.103");
+    // A reply from an older host (no address list) still decodes.
+    DiscoveryReply old = d;
+    old.remoteAddresses.clear();
+    auto ob = old.encode();
+    DiscoveryReply o2;
+    CHECK(o2.decode(ob.data(), ob.size() - 2) && o2.remoteAddresses.empty());
 
     // Stream ids travel in the video header.
     Packetizer pk(0);

@@ -91,5 +91,7 @@ private:
 std::string hostName();
 // IPv4 addresses of this machine's network interfaces (not loopback).
 std::vector<std::string> localAddresses();
+// This machine's Tailscale addresses (100.64.0.0/10): permanent, reachable from anywhere.
+std::vector<std::string> tailscaleAddresses();
 
 }  // namespace hl::net

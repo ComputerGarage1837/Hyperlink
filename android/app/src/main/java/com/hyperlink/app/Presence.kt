@@ -24,6 +24,7 @@ data class HostPresence(
     val clients: Int,
     val streams: Int,
     val seenAt: Long,
+    val remoteAddresses: List<String> = emptyList(),
 )
 
 /**
@@ -148,7 +149,8 @@ class Presence(private val ctx: Context, private val onUpdate: (Map<String, Host
                 val pin = b.get().toInt() != 0
                 val clients = b.short.toInt() and 0xffff
                 val streams = b.short.toInt() and 0xffff
-                HostPresence(from, hostId, name, version, port, pin, clients, streams, System.currentTimeMillis())
+                val remote = if (b.remaining() >= 2) List(b.short.toInt() and 0xffff) { str() } else emptyList()
+                HostPresence(from, hostId, name, version, port, pin, clients, streams, System.currentTimeMillis(), remote)
             }.getOrNull()
         }
     }

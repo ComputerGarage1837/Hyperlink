@@ -421,20 +421,26 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         thread(name = "connect") {
             // Find the PC by its permanent id first; the saved address is only a fallback
             // (e.g. a Tailscale name when away from home).
-            val found = Presence.locate(device.hostId)
-            val address = found ?: device.address
-            if (address.isEmpty()) {
+            // Home network first (by id), then the PC's Tailscale address, then what the user typed.
+            val tries = listOfNotNull(Presence.locate(device.hostId),
+                device.remoteAddress.ifEmpty { null }, device.address.ifEmpty { null }).distinct()
+            if (tries.isEmpty()) {
                 runOnUiThread {
                     showOverlay("Can't find ${device.name} on this network.\n\nIs it switched on and running Hyperlink? " +
-                        "To connect from elsewhere, add a fallback address (such as its Tailscale name) in Edit.",
+                        "To reach it from anywhere, install Tailscale on both devices and connect once at home.",
                         false, "Try again" to { connect() }, "Close" to { finish() })
                 }
                 return@thread
             }
-            val err = c.connect(address, device.port, name, id, device.pin, dm.widthPixels, dm.heightPixels, hz, mask)
+            var err: String? = "No answer"
+            for (address in tries) {
+                err = c.connect(address, device.port, name, id, device.pin, dm.widthPixels, dm.heightPixels, hz, mask)
+                if (err == null || err.contains("PIN", ignoreCase = true)) break
+            }
+            val result = err
             runOnUiThread {
                 if (isDestroyed || client !== c) return@runOnUiThread
-                if (err == null) {
+                if (result == null) {
                     connected = true
                     ActiveSessions.add(device.id)
                     showOverlay(null)
@@ -442,10 +448,10 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
                     root.removeCallbacks(statsTick)
                     root.post(statsTick)
                     syncStreams()
-                } else if (err.contains("PIN", ignoreCase = true)) {
-                    askPin(err)
+                } else if (result.contains("PIN", ignoreCase = true)) {
+                    askPin(result)
                 } else {
-                    showOverlay("Couldn't connect to ${device.name}\n\n$err", false,
+                    showOverlay("Couldn't connect to ${device.name}\n\n$result", false,
                         "Try again" to { connect() }, "Close" to { finish() })
                 }
             }
@@ -472,11 +478,12 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             .show()
     }
 
-    override fun onWelcome(hostName: String, hostId: String, hostVersion: String, codecMask: Int) {
+    override fun onWelcome(hostName: String, hostId: String, hostVersion: String, codecMask: Int, remoteAddress: String) {
         this.hostCodecs = codecMask
         this.hostName = hostName
         runOnUiThread {
-            device = device.copy(hostId = hostId, lastSeen = System.currentTimeMillis())
+            device = device.copy(hostId = hostId, lastSeen = System.currentTimeMillis(),
+                remoteAddress = remoteAddress.ifEmpty { device.remoteAddress })
             DeviceStore.save(this, device)
         }
     }

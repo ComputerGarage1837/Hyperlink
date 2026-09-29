@@ -21,7 +21,7 @@ data class Monitor(
 class NativeClient(private val listener: Listener) {
 
     interface Listener {
-        fun onWelcome(hostName: String, hostId: String, hostVersion: String, codecMask: Int)
+        fun onWelcome(hostName: String, hostId: String, hostVersion: String, codecMask: Int, remoteAddress: String)
         fun onMonitors(monitors: List<Monitor>)
         fun onStreamStarted(streamId: Int, monitorId: Int, width: Int, height: Int, fps: Int, codec: Int, encoder: String)
         fun onStreamError(streamId: Int, message: String)
@@ -86,8 +86,8 @@ class NativeClient(private val listener: Listener) {
 
     // ---- called from native code
     @Suppress("unused")
-    private fun onWelcome(hostName: String, hostId: String, version: String, codecMask: Int) =
-        listener.onWelcome(hostName, hostId, version, codecMask)
+    private fun onWelcome(hostName: String, hostId: String, version: String, codecMask: Int, remote: String) =
+        listener.onWelcome(hostName, hostId, version, codecMask, remote)
 
     @Suppress("unused")
     private fun onMonitors(ints: IntArray, names: Array<String>) {

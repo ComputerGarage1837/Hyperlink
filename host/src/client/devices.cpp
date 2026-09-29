@@ -45,6 +45,7 @@ std::vector<SavedDevice> all() {
         d.name = get(sec, L"name");
         d.hostId = get(sec, L"hostId");
         d.address = get(sec, L"address");
+        d.remoteAddress = get(sec, L"remoteAddress");
         d.pin = get(sec, L"pin");
         int port = atoi(get(sec, L"port").c_str());
         d.port = port > 0 ? (uint16_t)port : hl::kControlPort;
@@ -65,6 +66,7 @@ void save(const SavedDevice& in) {
     put(sec, L"name", d.name);
     put(sec, L"hostId", d.hostId);
     put(sec, L"address", d.address);
+    put(sec, L"remoteAddress", d.remoteAddress);
     put(sec, L"pin", d.pin);
     put(sec, L"port", std::to_string(d.port));
 }

@@ -65,6 +65,8 @@ void MonitorInfo::read(Reader& r) {
 std::vector<uint8_t> DiscoveryReply::encode() const {
     Writer w(0);
     w.str(hostId).str(hostName).str(version).u16(controlPort).u8(pinRequired).u16(clients).u16(streams);
+    w.u16((uint16_t)remoteAddresses.size());
+    for (auto& a : remoteAddresses) w.str(a);
     std::vector<uint8_t> out(kDiscoverReply, kDiscoverReply + kDiscoverTagLen);
     out.insert(out.end(), w.buf.begin() + 5, w.buf.end());
     return out;
@@ -74,6 +76,11 @@ bool DiscoveryReply::decode(const uint8_t* p, size_t n) {
     Reader r(p + kDiscoverTagLen, n - kDiscoverTagLen);
     hostId = r.str(); hostName = r.str(); version = r.str(); controlPort = r.u16();
     pinRequired = r.u8(); clients = r.u16(); streams = r.u16();
+    remoteAddresses.clear();
+    if (r.ok && r.n >= 2) {
+        uint16_t count = r.u16();
+        for (int i = 0; i < count && r.ok; i++) remoteAddresses.push_back(r.str());
+    }
     return r.ok;
 }
 
@@ -95,6 +102,8 @@ std::vector<uint8_t> Welcome::encode() const {
     w.u32(version).str(hostName).str(hostId).str(hostVersion).u32(sessionId).u16(videoPort).u32(codecMask);
     w.u16((uint16_t)monitors.size());
     for (auto& m : monitors) m.write(w);
+    w.u16((uint16_t)remoteAddresses.size());
+    for (auto& a : remoteAddresses) w.str(a);
     return w.done();
 }
 bool Welcome::decode(Reader& r) {
@@ -106,6 +115,11 @@ bool Welcome::decode(Reader& r) {
         MonitorInfo m;
         m.read(r);
         monitors.push_back(m);
+    }
+    remoteAddresses.clear();
+    if (r.ok && r.n >= 2) {
+        uint16_t n = r.u16();
+        for (int k = 0; k < n && r.ok; k++) remoteAddresses.push_back(r.str());
     }
     return r.ok;
 }

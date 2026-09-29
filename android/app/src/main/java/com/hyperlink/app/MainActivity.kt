@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        presence.targets = DeviceStore.all(this).map { it.address }.filter { it.isNotEmpty() }
+        presence.targets = DeviceStore.all(this).flatMap { listOf(it.remoteAddress, it.address) }.filter { it.isNotEmpty() }
         presence.start()
         refresh()
     }
@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
                 hostId = from?.hostId ?: existing?.hostId ?: "",
             )
             DeviceStore.save(this, d)
-            presence.targets = DeviceStore.all(this).map { it.address }.filter { it.isNotEmpty() }
+            presence.targets = DeviceStore.all(this).flatMap { listOf(it.remoteAddress, it.address) }.filter { it.isNotEmpty() }
             dialog.dismiss()
             refresh()
         }
@@ -290,7 +290,8 @@ class MainActivity : AppCompatActivity() {
         col.addView(top)
         col.addView(TextView(this).apply {
             text = buildString {
-                if (p != null) append("${p.name}  ·  v${p.version}  ·  found on this network")
+                if (p != null) append("${p.name}  ·  v${p.version}")
+                else if (d.remoteAddress.isNotEmpty()) append("Reachable from anywhere via Tailscale when it's on")
                 else if (d.address.isNotEmpty()) append("Fallback: ${d.address}")
                 else append("Found automatically when it's on your network")
             }

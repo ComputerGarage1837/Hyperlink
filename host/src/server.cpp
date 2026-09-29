@@ -107,6 +107,7 @@ void Session::run() {
     w.sessionId = id_;
     w.videoPort = hl::kVideoPort;
     w.codecMask = server_.codecMask();
+    w.remoteAddresses = hl::net::tailscaleAddresses();
     for (auto& m : server_.monitors()) w.monitors.push_back(m.info);
     conn_.send(w.encode());
     server_.statusChanged();
@@ -345,6 +346,7 @@ void Server::discoveryLoop() {
         Status s = status();
         d.clients = (uint16_t)s.clients.size();
         d.streams = (uint16_t)s.streams;
+        d.remoteAddresses = hl::net::tailscaleAddresses();
         auto reply = d.encode();
         discovery_.sendTo(from, reply.data(), reply.size());
     }

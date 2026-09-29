@@ -135,12 +135,16 @@ void SessionWindow::connect() {
         connecting_ = true;
     }
     std::thread([this, d, h, client, hostName, codecs] {
-        std::string addr;
-        if (!PresenceScanner::locate(d.hostId, addr)) addr = d.address;
+        // Home network first (found by id), then the host's Tailscale address, then what the user typed.
+        std::vector<std::string> tries;
+        std::string lan;
+        if (PresenceScanner::locate(d.hostId, lan)) tries.push_back(lan);
+        if (!d.remoteAddress.empty()) tries.push_back(d.remoteAddress);
+        if (!d.address.empty()) tries.push_back(d.address);
         auto* err = new std::string;
-        if (addr.empty()) {
-            *err = "Can't find " + d.name + " on this network. Is it on and running Hyperlink? To connect "
-                   "from elsewhere, give it a fallback address (such as its Tailscale name).";
+        if (tries.empty()) {
+            *err = "Can't find " + d.name + " on this network. Is it on and running Hyperlink? To reach it "
+                   "from anywhere, install Tailscale on both devices and connect once at home.";
         } else {
             HostSettings me = HostSettings::load();
             hl::Hello hello;
@@ -152,14 +156,20 @@ void SessionWindow::connect() {
             hello.displayHz = (uint16_t)localMaxHz();
             hello.codecMask = VideoView::decodableCodecs();
             hl::Welcome w;
-            *err = client->connect(addr, d.port, hello, w);
+            for (auto& addr : tries) {
+                *err = client->connect(addr, d.port, hello, w, 4000);
+                if (err->empty() || err->find("PIN") != std::string::npos) break;
+            }
             if (err->empty()) {
                 *hostName = w.hostName;
                 *codecs = w.codecMask;
                 // Remember the host's permanent id so it's found by id from now on.
-                if (d.hostId != w.hostId) {
+                // Remember the host's permanent id and Tailscale address for next time.
+                std::string remote = w.remoteAddresses.empty() ? d.remoteAddress : w.remoteAddresses[0];
+                if (d.hostId != w.hostId || d.remoteAddress != remote) {
                     SavedDevice nd = d;
                     nd.hostId = w.hostId;
+                    nd.remoteAddress = remote;
                     if (!nd.id.empty()) devices::save(nd);
                 }
                 PostMessageW(h, WM_S_MONITORS, 0, (LPARAM) new std::vector<hl::MonitorInfo>(w.monitors));

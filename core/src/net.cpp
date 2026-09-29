@@ -300,4 +300,15 @@ std::vector<std::string> localAddresses() {
     return out;
 }
 
+std::vector<std::string> tailscaleAddresses() {
+    std::vector<std::string> out;
+    for (auto& a : localAddresses()) {
+        in_addr ia{};
+        if (inet_pton(AF_INET, a.c_str(), &ia) != 1) continue;
+        uint32_t v = ntohl(ia.s_addr);
+        if ((v & 0xFFC00000u) == 0x64400000u) out.push_back(a);  // 100.64.0.0/10 (CGNAT, used by Tailscale)
+    }
+    return out;
+}
+
 }  // namespace hl::net

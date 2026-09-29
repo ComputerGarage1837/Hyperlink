@@ -14,11 +14,12 @@ data class SavedDevice(
     val port: Int = NativeClient.DEFAULT_PORT,
     val pin: String = "",
     val hostId: String = "",       // learned from the host; lets us follow it to a new IP
+    val remoteAddress: String = "", // the host's Tailscale address, learned automatically
     val lastSeen: Long = 0,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("name", name).put("address", address).put("port", port)
-        .put("pin", pin).put("hostId", hostId).put("lastSeen", lastSeen)
+        .put("pin", pin).put("hostId", hostId).put("remoteAddress", remoteAddress).put("lastSeen", lastSeen)
 
     companion object {
         fun fromJson(o: JSONObject) = SavedDevice(
@@ -28,6 +29,7 @@ data class SavedDevice(
             port = o.optInt("port", NativeClient.DEFAULT_PORT),
             pin = o.optString("pin"),
             hostId = o.optString("hostId"),
+            remoteAddress = o.optString("remoteAddress"),
             lastSeen = o.optLong("lastSeen"),
         )
     }

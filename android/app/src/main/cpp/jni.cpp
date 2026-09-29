@@ -94,7 +94,7 @@ public:
         onCursorShapeId = e->GetMethodID(c, "onCursorShape", "(IIII[I)V");
         onCursorPosId = e->GetMethodID(c, "onCursorPos", "(IIIZ)V");
         onDisconnectedId = e->GetMethodID(c, "onDisconnected", "(Ljava/lang/String;)V");
-        onWelcomeId = e->GetMethodID(c, "onWelcome", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
+        onWelcomeId = e->GetMethodID(c, "onWelcome", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)V");
     }
     ~JniClient() override {
         client.disconnect();
@@ -167,7 +167,9 @@ public:
         jstring a = e->NewStringUTF(w.hostName.c_str());
         jstring b = e->NewStringUTF(w.hostId.c_str());
         jstring c = e->NewStringUTF(w.hostVersion.c_str());
-        e->CallVoidMethod(self, onWelcomeId, a, b, c, (jint)w.codecMask);
+        jstring rem = e->NewStringUTF(w.remoteAddresses.empty() ? "" : w.remoteAddresses[0].c_str());
+        e->CallVoidMethod(self, onWelcomeId, a, b, c, (jint)w.codecMask, rem);
+        e->DeleteLocalRef(rem);
         e->DeleteLocalRef(a);
         e->DeleteLocalRef(b);
         e->DeleteLocalRef(c);

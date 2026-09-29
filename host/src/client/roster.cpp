@@ -50,7 +50,13 @@ void refresh() {
             r.p = it->second;
             seen.erase(it);
         }
+        if (!d.remoteAddress.empty()) targets.push_back(d.remoteAddress);
         if (!d.address.empty()) targets.push_back(d.address);
+        // Pick up a host's Tailscale address as soon as we see it.
+        if (r.online && !r.p.info.remoteAddresses.empty() && r.p.info.remoteAddresses[0] != d.remoteAddress) {
+            r.dev.remoteAddress = r.p.info.remoteAddresses[0];
+            devices::save(r.dev);
+        }
         gRows.push_back(r);
     }
     for (auto& [id, p] : seen) {
@@ -73,7 +79,9 @@ void refresh() {
         std::wstring status, detail;
         if (!r.online) {
             status = L"○ Offline";
-            detail = r.dev.address.empty() ? L"Found automatically when it's on your network" : L"Fallback: " + W(r.dev.address);
+            detail = !r.dev.remoteAddress.empty() ? L"Reachable from anywhere via Tailscale when it's on"
+                     : r.dev.address.empty() ? L"Found automatically when it's on your network"
+                                             : L"Fallback: " + W(r.dev.address);
         } else if (r.p.info.clients > 0) {
             status = L"● In use";
             detail = std::to_wstring(r.p.info.clients) + L" connected, " + std::to_wstring(r.p.info.streams) +

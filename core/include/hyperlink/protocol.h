@@ -113,6 +113,9 @@ struct DiscoveryReply {
     uint8_t pinRequired = 0;
     uint16_t clients = 0;      // clients connected right now
     uint16_t streams = 0;      // monitors being streamed right now
+    // Addresses that reach this host from outside the local network and don't change
+    // (its Tailscale addresses). Optional on the wire: older hosts don't send them.
+    std::vector<std::string> remoteAddresses;
 
     std::vector<uint8_t> encode() const;  // includes kDiscoverReply
     bool decode(const uint8_t* p, size_t n);
@@ -139,6 +142,7 @@ struct Welcome {
     uint16_t videoPort = kVideoPort;
     uint32_t codecMask = 0;  // what the host can encode
     std::vector<MonitorInfo> monitors;
+    std::vector<std::string> remoteAddresses;  // see DiscoveryReply
 
     std::vector<uint8_t> encode() const;
     bool decode(Reader& r);
