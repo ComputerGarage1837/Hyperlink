@@ -2,6 +2,7 @@ add_library(hyperlink_core STATIC
     src/client.cpp
     src/common.cpp
     src/fec.cpp
+    src/hostcore.cpp
     src/json.cpp
     src/net.cpp
     src/protocol.cpp

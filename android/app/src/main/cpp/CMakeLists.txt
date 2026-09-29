@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(HL_CORE ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../core)
 add_subdirectory(${HL_CORE} ${CMAKE_BINARY_DIR}/core)
 
-add_library(hyperlink SHARED jni.cpp decoder.cpp)
+add_library(hyperlink SHARED jni.cpp decoder.cpp host_jni.cpp)
 target_compile_options(hyperlink PRIVATE -O2 -Wall)
 target_compile_options(hyperlink_core PRIVATE -O2)
 target_link_libraries(hyperlink PRIVATE hyperlink_core mediandk android log)

@@ -24,6 +24,11 @@ struct ThreadEnv {
     }
 };
 
+JNIEnv* env();
+}  // namespace
+JNIEnv* hlJniEnv() { return env(); }
+namespace {
+
 JNIEnv* env() {
     thread_local ThreadEnv t;
     if (!t.env) {

@@ -10,6 +10,7 @@
 #include "hyperlink/common.h"
 #include "hyperlink/net.h"
 #include "hyperlink/fec.h"
+#include "hyperlink/hostcore.h"
 #include "hyperlink/json.h"
 #include "hyperlink/protocol.h"
 #include "hyperlink/video.h"
@@ -349,7 +350,55 @@ static void testClientEndToEnd() {
     client.disconnect();
 }
 
+// The portable host (used by Android): sign-in, a stream fed by the "platform", input.
+static void testHostCore() {
+    HostCore::Config cfg;
+    cfg.name = "Phone"; cfg.pin = "4321"; cfg.hostId = "ph1"; cfg.version = "t";
+    cfg.controlPort = 47910; cfg.videoPort = 47911; cfg.discoveryPort = 47912;
+    std::atomic<int> starts{0}, inputs{0};
+    HostCore* hostPtr = nullptr;
+    HostCore::Callbacks cb;
+    cb.monitors = [] { MonitorInfo m; m.id = 1; m.name = "Screen"; m.width = 1080; m.height = 2400; return std::vector<MonitorInfo>{m}; };
+    cb.startEncoder = [&](const StartStream&) { starts++; };
+    cb.input = [&](const std::vector<uint8_t>& b) { if (b[0] == MSG_MOUSE_ABS) inputs++; };
+    HostCore host(cfg, cb);
+    hostPtr = &host;
+    CHECK(host.start());
+
+    struct Sink : FrameSink {
+        std::atomic<int> n{0};
+        bool onFrame(const CompleteFrame& f, const StreamStarted& i) override { if (i.width == 1080) n++; return true; }
+    };
+    ClientListener l;
+    Client c(&l);
+    Hello h; h.pin = "4321"; h.clientName = "pc";
+    Welcome w;
+    CHECK(c.connect("127.0.0.1", 47910, h, w).empty());
+    CHECK(w.monitors.size() == 1 && w.monitors[0].height == 2400 && w.hostId == "ph1");
+    auto sink = std::make_shared<Sink>();
+    StartStream ss; ss.streamId = 0; ss.monitorId = 1;
+    c.startStream(ss, sink);
+    for (int i = 0; i < 50 && starts == 0; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    CHECK(starts == 1);
+    hostPtr->streamReady(1080, 2400, 60, CODEC_H264, "test");
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::vector<uint8_t> frame(3000, 7);
+    for (int i = 0; i < 3; i++) {
+        hostPtr->sendFrame(frame.data(), frame.size(), i == 0, nowUs());
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(sink->n == 3);
+    c.mouseAbs(1, 100, 200);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(inputs == 1);
+    CHECK(host.clientCount() == 1 && host.streamCount() == 1);
+    c.disconnect();
+    host.stop();
+}
+
 int main() {
+    testHostCore();
     testClientEndToEnd();
     testJson();
     testDiscovery();

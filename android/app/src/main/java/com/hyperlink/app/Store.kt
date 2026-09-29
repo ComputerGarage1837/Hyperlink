@@ -114,6 +114,12 @@ class Settings(ctx: Context) {
     var clientName: String
         get() = p.getString("clientName", null) ?: "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
         set(v) = p.edit().putString("clientName", v).apply()
+    /** PIN other devices need to connect to this phone. */
+    var hostPin: String
+        get() = p.getString("hostPin", null) ?: (100000 + java.util.Random().nextInt(900000)).toString().also {
+            p.edit().putString("hostPin", it).apply()
+        }
+        set(v) = p.edit().putString("hostPin", v).apply()
     val clientId: String
         get() = p.getString("clientId", null) ?: UUID.randomUUID().toString().also {
             p.edit().putString("clientId", it).apply()

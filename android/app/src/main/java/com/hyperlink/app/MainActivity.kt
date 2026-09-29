@@ -42,6 +42,17 @@ class MainActivity : AppCompatActivity() {
         data class Device(val d: SavedDevice, val p: HostPresence?, val openHere: Int) : Row()
         data class Nearby(val p: HostPresence) : Row()
         data class Hint(val text: String) : Row()
+        object ThisPhone : Row()
+    }
+
+    private val capture = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == RESULT_OK && r.data != null) HostService.start(this, r.resultCode, r.data!!)
+    }
+
+    private fun startSharing() {
+        val mpm = getSystemService(android.media.projection.MediaProjectionManager::class.java)
+        capture.launch(mpm.createScreenCaptureIntent())
     }
 
     private lateinit var settings: Settings
@@ -88,6 +99,7 @@ class MainActivity : AppCompatActivity() {
         }
         setContentView(root)
         ActiveSessions.onChange = { runOnUiThread { refresh() } }
+        HostService.onStatus = { runOnUiThread { refresh() } }
         refresh()
         if (savedInstanceState == null && settings.checkUpdatesOnStart) Updater.check(this, userAsked = false)
         intent.getStringExtra(EXTRA_RESUME)?.let { SessionActivity.resume(this, it) }
@@ -145,7 +157,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun refresh() {
         val saved = DeviceStore.all(this)
-        val rows = mutableListOf<Row>(Row.Header("My devices"))
+        val rows = mutableListOf<Row>(Row.Header("This phone"), Row.ThisPhone, Row.Header("My devices"))
         if (saved.isEmpty()) rows += Row.Hint("No devices yet. Install Hyperlink Host on your PC, then tap Add device " +
             "or pick it from the list below.")
         val matched = HashSet<String>()
@@ -154,7 +166,7 @@ class MainActivity : AppCompatActivity() {
             if (p != null) matched += p.address
             rows += Row.Device(d, p, ActiveSessions.count(d.id))
         }
-        val nearby = found.values.filter { it.address !in matched && saved.none { s -> s.hostId.isNotEmpty() && s.hostId == it.hostId } }
+        val nearby = found.values.filter { it.hostId != settings.clientId && it.address !in matched && saved.none { s -> s.hostId.isNotEmpty() && s.hostId == it.hostId } }
         rows += Row.Header("Found on your network")
         if (nearby.isEmpty()) rows += Row.Hint("Looking for PCs running Hyperlink Host…")
         nearby.sortedBy { it.name.lowercase() }.forEach { rows += Row.Nearby(it) }
@@ -249,6 +261,7 @@ class MainActivity : AppCompatActivity() {
             is Row.Device -> 1
             is Row.Nearby -> 2
             is Row.Hint -> 3
+            is Row.ThisPhone -> 4
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -272,7 +285,7 @@ class MainActivity : AppCompatActivity() {
                     useCompatPadding = false
                 }
             }
-            v.layoutParams = RecyclerView.LayoutParams(-1, -2).apply { if (viewType == 1 || viewType == 2) bottomMargin = dp(10) }
+            v.layoutParams = RecyclerView.LayoutParams(-1, -2).apply { if (viewType == 1 || viewType == 2 || viewType == 4) bottomMargin = dp(10) }
             return object : RecyclerView.ViewHolder(v) {}
         }
 
@@ -282,6 +295,7 @@ class MainActivity : AppCompatActivity() {
                 is Row.Hint -> (holder.itemView as TextView).text = row.text
                 is Row.Device -> bindDevice(holder.itemView as MaterialCardView, row)
                 is Row.Nearby -> bindNearby(holder.itemView as MaterialCardView, row.p)
+                is Row.ThisPhone -> bindThisPhone(holder.itemView as MaterialCardView)
             }
         }
     }
@@ -346,6 +360,70 @@ class MainActivity : AppCompatActivity() {
         card.addView(col)
         card.setOnClickListener { connect(d) }
         card.setOnLongClickListener { deviceMenu(it, d); true }
+    }
+
+    private fun bindThisPhone(card: MaterialCardView) {
+        card.removeAllViews()
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(14), dp(10), dp(12))
+        }
+        val sharing = HostService.running
+        val counts = HostService.instance?.counts() ?: intArrayOf(0, 0)
+        col.addView(TextView(this).apply {
+            text = settings.clientName
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 19f)
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        val (color, status) = when {
+            !sharing -> 0xFF6B7280.toInt() to "Not shared: other devices can't see or control this phone"
+            counts[0] > 0 -> 0xFFFBBF24.toInt() to "Shared · ${counts[0]} connected · PIN ${settings.hostPin}"
+            else -> 0xFF4ADE80.toInt() to "Shared · waiting for a device · PIN ${settings.hostPin}"
+        }
+        col.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, 0)
+            addView(statusDot(color))
+            addView(TextView(this@MainActivity).apply { text = status; setTextColor(Color.WHITE) })
+        })
+        if (sharing && !RemoteInput.enabled) col.addView(TextView(this).apply {
+            text = "Viewers can see the screen. To let them tap and type too, switch on Hyperlink remote control."
+            setTextColor(0xFFC9BFA8.toInt())
+            setPadding(0, dp(6), 0, 0)
+        })
+        val actions = LinearLayout(this).apply { setPadding(0, dp(10), 0, 0) }
+        actions.addView(MaterialButton(this).apply {
+            text = if (sharing) "Stop sharing" else "Share this phone"
+            isAllCaps = false
+            setTextColor(0xFF0B0B0B.toInt())
+            backgroundTintList = ColorStateList.valueOf(0xFFE3B341.toInt())
+            setOnClickListener { if (sharing) HostService.stop(this@MainActivity) else startSharing(); card.postDelayed({ refresh() }, 400) }
+        })
+        if (!RemoteInput.enabled) actions.addView(textButton("Allow control") {
+            startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            android.widget.Toast.makeText(this, "Open Hyperlink remote control and switch it on", android.widget.Toast.LENGTH_LONG).show()
+        })
+        actions.addView(textButton("PIN") { changePin() })
+        col.addView(actions)
+        card.addView(col)
+        card.setOnClickListener(null)
+        card.setOnLongClickListener(null)
+    }
+
+    private fun changePin() {
+        val til = TextInputLayout(this).apply { hint = "PIN other devices enter" }
+        val et = TextInputEditText(til.context).apply {
+            setText(settings.hostPin); inputType = InputType.TYPE_CLASS_NUMBER
+        }
+        til.addView(et)
+        val box = FrameLayout(this).apply { setPadding(dp(24), dp(8), dp(24), 0); addView(til) }
+        MaterialAlertDialogBuilder(this).setTitle("This phone's PIN").setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                settings.hostPin = et.text.toString().trim()
+                HostService.instance?.setPin(settings.hostPin)
+                refresh()
+            }.setNegativeButton("Cancel", null).show()
     }
 
     private fun bindNearby(card: MaterialCardView, p: HostPresence) {
