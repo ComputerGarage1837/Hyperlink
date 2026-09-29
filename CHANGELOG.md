@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.0 — 2026-09-29
+
+- **Windows can now connect to other devices too.** One app: it still hosts this PC from the
+  tray, and now also opens the **device list** (double-click the tray icon, or start
+  Hyperlink from the Start menu): your devices with Online / In use / Offline status, new PCs
+  found on your network, and this PC's name and PIN.
+- Each connection opens in **its own window**: all screens together or one at a time
+  (View menu), choose which screens show, and **open any screen in its own window**.
+  Full screen with Ctrl+Alt+Enter; Win key and Alt+Tab go to the remote PC; the remote
+  pointer shape is used locally. GPU decoding on NVIDIA, AMD and Intel.
+- **Works away from home with Tailscale.** Install Tailscale on your devices and connect once
+  at home; after that each device remembers the others' permanent Tailscale addresses and
+  connects from anywhere, trying your home network first. Online status works over Tailscale too.
+- Android: connects over Tailscale the same way.
+
 ## v0.1.1 — 2026-09-29
 
 - **Pinch to zoom** any screen (up to 5×) and drag with two fingers while pinching to move
