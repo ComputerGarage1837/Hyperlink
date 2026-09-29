@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Hyperlink" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#3EE6FF</item>
+        <item name="colorOnPrimary">#0E1026</item>
+        <item name="colorSecondary">#8A5CFF</item>
+        <item name="colorSurface">#1A2250</item>
+        <item name="android:colorBackground">#0E1026</item>
+        <item name="android:windowBackground">#0E1026</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <style name="Theme.Hyperlink.Session">
+        <item name="android:windowBackground">#05060F</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+</resources>
