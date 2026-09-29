@@ -16,6 +16,8 @@ extern "C" {
 using Microsoft::WRL::ComPtr;
 
 // Not in every SDK's headers.
+static const GUID kH264Profile = {0x1b81be68, 0xa0c7, 0x11d3, {0xb9, 0x84, 0x00, 0xc0, 0x4f, 0x2e, 0x73, 0xc5}};
+static const GUID kHevcMain = {0x5b11d51b, 0x2f4c, 0x4452, {0xbc, 0xc3, 0x09, 0xf2, 0xa1, 0x16, 0x0c, 0xc0}};
 static const GUID kAv1Profile0 = {0xb8be4ccb, 0xcf53, 0x46ba, {0x8d, 0x59, 0xd6, 0xb8, 0xa6, 0xda, 0x5d, 0x2a}};
 
 static const wchar_t* kClass = L"HyperlinkVideoView";
@@ -73,8 +75,8 @@ uint32_t VideoView::decodableCodecs() {
     for (UINT i = 0; i < n; i++) {
         GUID g;
         if (FAILED(vd->GetVideoDecoderProfile(i, &g))) continue;
-        if (g == D3D11_DECODER_PROFILE_H264_VLD_NOFGT) mask |= 1u << hl::CODEC_H264;
-        if (g == D3D11_DECODER_PROFILE_HEVC_VLD_MAIN) mask |= 1u << hl::CODEC_HEVC;
+        if (g == kH264Profile) mask |= 1u << hl::CODEC_H264;
+        if (g == kHevcMain) mask |= 1u << hl::CODEC_HEVC;
         if (g == kAv1Profile0) mask |= 1u << hl::CODEC_AV1;
     }
     return mask ? mask : 1u << hl::CODEC_H264;
