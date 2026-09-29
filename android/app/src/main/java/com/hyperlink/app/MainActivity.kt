@@ -33,6 +33,9 @@ import kotlin.math.roundToInt
 
 /** Home screen: saved devices with live status, hosts found nearby, updates and settings. */
 class MainActivity : AppCompatActivity() {
+    companion object {
+        const val EXTRA_RESUME = "resume"
+    }
 
     private sealed class Row {
         data class Header(val text: String) : Row()
@@ -54,7 +57,7 @@ class MainActivity : AppCompatActivity() {
 
         val root = FrameLayout(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF0E1026.toInt(), 0xFF141C45.toInt()))
+                intArrayOf(0xFF0B0B0B.toInt(), 0xFF17140E.toInt()))
         }
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         column.addView(header())
@@ -69,8 +72,8 @@ class MainActivity : AppCompatActivity() {
 
         val fab = ExtendedFloatingActionButton(this).apply {
             text = "Add device"
-            setTextColor(0xFF0E1026.toInt())
-            backgroundTintList = ColorStateList.valueOf(0xFF3EE6FF.toInt())
+            setTextColor(0xFF0B0B0B.toInt())
+            backgroundTintList = ColorStateList.valueOf(0xFFE3B341.toInt())
             setOnClickListener { editDevice(null, null) }
         }
         root.addView(fab, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply {
@@ -87,6 +90,17 @@ class MainActivity : AppCompatActivity() {
         ActiveSessions.onChange = { runOnUiThread { refresh() } }
         refresh()
         if (savedInstanceState == null && settings.checkUpdatesOnStart) Updater.check(this, userAsked = false)
+        intent.getStringExtra(EXTRA_RESUME)?.let { SessionActivity.resume(this, it) }
+        // The "Connected to …" notification that keeps sessions alive needs this on Android 13+.
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        intent.getStringExtra(EXTRA_RESUME)?.let { SessionActivity.resume(this, it) }
     }
 
     override fun onResume() {
@@ -125,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         MaterialButton(this, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
             text = label
             isAllCaps = false
-            setTextColor(0xFF3EE6FF.toInt())
+            setTextColor(0xFFE3B341.toInt())
             setOnClickListener { onClick() }
         }
 
@@ -147,7 +161,13 @@ class MainActivity : AppCompatActivity() {
         adapter.submit(rows)
     }
 
-    private fun connect(d: SavedDevice, monitor: Int = -1) = SessionActivity.open(this, d.id, monitor)
+    /** Returns to an open session for this device, or opens one. */
+    private fun connect(d: SavedDevice, monitor: Int = -1) {
+        if (monitor < 0 && SessionActivity.resume(this, d.id)) return
+        SessionActivity.open(this, d.id, monitor)
+    }
+
+    private fun connectNewWindow(d: SavedDevice) = SessionActivity.open(this, d.id, -1)
 
     private fun editDevice(existing: SavedDevice?, from: HostPresence?) {
         fun field(hint: String, value: String, type: Int): Pair<TextInputLayout, TextInputEditText> {
@@ -199,7 +219,7 @@ class MainActivity : AppCompatActivity() {
             menu.add("Remove")
             setOnMenuItemClickListener {
                 when (it.title.toString()) {
-                    "Connect in a new window" -> connect(d)
+                    "Connect in a new window" -> connectNewWindow(d)
                     "Edit name, address or PIN" -> editDevice(d, null)
                     "Remove" -> MaterialAlertDialogBuilder(this@MainActivity)
                         .setTitle("Remove ${d.name}?")
@@ -234,19 +254,19 @@ class MainActivity : AppCompatActivity() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val v: View = when (viewType) {
                 0 -> TextView(parent.context).apply {
-                    setTextColor(0xFF9AA6D8.toInt())
+                    setTextColor(0xFFB89A55.toInt())
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                     setTypeface(typeface, Typeface.BOLD)
                     setPadding(dp(8), dp(20), dp(8), dp(8))
                 }
                 3 -> TextView(parent.context).apply {
-                    setTextColor(0xFFB8C0E6.toInt())
+                    setTextColor(0xFFC9BFA8.toInt())
                     setPadding(dp(8), dp(4), dp(8), dp(8))
                 }
                 else -> MaterialCardView(parent.context).apply {
                     radius = dp(18).toFloat()
-                    setCardBackgroundColor(0xFF1A2250.toInt())
-                    strokeColor = 0x333EE6FF
+                    setCardBackgroundColor(0xFF1A1712.toInt())
+                    strokeColor = 0x33E3B341
                     strokeWidth = dp(1)
                     cardElevation = 0f
                     useCompatPadding = false
@@ -295,7 +315,7 @@ class MainActivity : AppCompatActivity() {
                 else if (d.address.isNotEmpty()) append("Fallback: ${d.address}")
                 else append("Found automatically when it's on your network")
             }
-            setTextColor(0xFFB8C0E6.toInt())
+            setTextColor(0xFFC9BFA8.toInt())
         })
 
         val (color, status) = when {
@@ -318,8 +338,8 @@ class MainActivity : AppCompatActivity() {
         actions.addView(MaterialButton(this).apply {
             text = "Connect"
             isAllCaps = false
-            setTextColor(0xFF0E1026.toInt())
-            backgroundTintList = ColorStateList.valueOf(0xFF3EE6FF.toInt())
+            setTextColor(0xFF0B0B0B.toInt())
+            backgroundTintList = ColorStateList.valueOf(0xFFE3B341.toInt())
             setOnClickListener { connect(d) }
         })
         col.addView(actions)
@@ -344,7 +364,7 @@ class MainActivity : AppCompatActivity() {
             })
             addView(TextView(this@MainActivity).apply {
                 text = "${p.address}  ·  v${p.version}" + if (p.pinRequired) "  ·  PIN needed" else ""
-                setTextColor(0xFFB8C0E6.toInt())
+                setTextColor(0xFFC9BFA8.toInt())
             })
         }, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(textButton("Add") { editDevice(null, p) })

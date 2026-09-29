@@ -35,7 +35,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         val scroll = ScrollView(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF0E1026.toInt(), 0xFF141C45.toInt()))
+                intArrayOf(0xFF0B0B0B.toInt(), 0xFF17140E.toInt()))
             addView(list)
         }
         ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
@@ -91,7 +91,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun section(title: String) {
         list.addView(TextView(this).apply {
             text = title.uppercase()
-            setTextColor(0xFF9AA6D8.toInt())
+            setTextColor(0xFFB89A55.toInt())
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTypeface(typeface, Typeface.BOLD)
             setPadding(dp(12), dp(20), dp(12), dp(6))
@@ -115,7 +115,7 @@ class SettingsActivity : AppCompatActivity() {
         })
         r.addView(TextView(this).apply {
             text = value
-            setTextColor(0xFF3EE6FF.toInt())
+            setTextColor(0xFFE3B341.toInt())
         })
         list.addView(r)
         return r

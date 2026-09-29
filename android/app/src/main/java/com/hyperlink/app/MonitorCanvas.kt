@@ -27,7 +27,7 @@ class MonitorTile(ctx: Context, val monitor: Monitor) : FrameLayout(ctx) {
         setTextColor(Color.WHITE)
         setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
         setPadding(dp(8), dp(3), dp(8), dp(3))
-        background = GradientDrawable().apply { setColor(0xB30E1026.toInt()); cornerRadius = dp(10).toFloat() }
+        background = GradientDrawable().apply { setColor(0xB30B0B0B.toInt()); cornerRadius = dp(10).toFloat() }
     }
     private val border = View(ctx)
 
@@ -44,7 +44,7 @@ class MonitorTile(ctx: Context, val monitor: Monitor) : FrameLayout(ctx) {
         label.visibility = if (showLabel) VISIBLE else GONE
         border.background = if (showLabel) GradientDrawable().apply {
             setColor(Color.TRANSPARENT)
-            setStroke(dp(if (highlighted) 2 else 1), if (highlighted) 0xFF3EE6FF.toInt() else 0x553EE6FF)
+            setStroke(dp(if (highlighted) 2 else 1), if (highlighted) 0xFFE3B341.toInt() else 0x55E3B341)
         } else null
     }
 
@@ -123,7 +123,7 @@ class MonitorCanvas(ctx: Context) : ViewGroup(ctx) {
     }
 
     init {
-        setBackgroundColor(0xFF05060F.toInt())
+        setBackgroundColor(0xFF050505.toInt())
     }
 
     fun setMonitors(monitors: List<Monitor>) {

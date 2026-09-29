@@ -48,6 +48,20 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         const val EXTRA_DEVICE = "device"
         const val EXTRA_MONITOR = "monitor"   // -1 = all monitors / user's default
 
+        /** Brings an already-open session for this device to the front. Returns false if none. */
+        fun resume(ctx: Context, deviceId: String): Boolean {
+            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            for (t in am.appTasks) {
+                val base = runCatching { t.taskInfo.baseIntent }.getOrNull() ?: continue
+                if (base.component?.className == SessionActivity::class.java.name &&
+                    base.getStringExtra(EXTRA_DEVICE) == deviceId) {
+                    t.moveToFront()
+                    return true
+                }
+            }
+            return false
+        }
+
         /** Opens a session in a new window (its own task, beside this one in split screen). */
         fun open(ctx: Context, deviceId: String, monitorId: Int = -1) {
             val i = Intent(ctx, SessionActivity::class.java)
@@ -164,7 +178,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
 
     @SuppressLint("ClickableViewAccessibility")
     private fun buildUi() {
-        root = FrameLayout(this).apply { setBackgroundColor(0xFF05060F.toInt()) }
+        root = FrameLayout(this).apply { setBackgroundColor(0xFF050505.toInt()) }
         canvas = MonitorCanvas(this)
         canvas.surfaceListener = this
         canvas.onLayoutChanged = { cursor.invalidate(); syncStreams() }
@@ -188,7 +202,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         canvas.setOnGenericMotionListener { _, e -> touch.onGenericMotion(e) }
 
         statsView = TextView(this).apply {
-            setTextColor(0xFFE6FBFF.toInt())
+            setTextColor(0xFFF5ECD6.toInt())
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
             typeface = Typeface.MONOSPACE
             setPadding(dp(10), dp(6), dp(10), dp(6))
@@ -204,7 +218,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(dp(18), dp(2), dp(18), dp(6))
-            background = GradientDrawable().apply { setColor(0x663EE6FF); cornerRadius = dp(12).toFloat() }
+            background = GradientDrawable().apply { setColor(0x66E3B341); cornerRadius = dp(12).toFloat() }
             setOnClickListener { showToolbar(true) }
         }
         root.addView(handleView, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
@@ -218,7 +232,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         }
         toolbar = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
-            background = GradientDrawable().apply { setColor(0xE60E1026.toInt()); cornerRadius = dp(16).toFloat() }
+            background = GradientDrawable().apply { setColor(0xE60B0B0B.toInt()); cornerRadius = dp(16).toFloat() }
             addView(toolbarRow)
             visibility = View.GONE
         }
@@ -239,12 +253,12 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             gravity = Gravity.CENTER
         }
-        overlayProgress = ProgressBar(this).apply { indeterminateTintList = ColorStateList.valueOf(0xFF3EE6FF.toInt()) }
+        overlayProgress = ProgressBar(this).apply { indeterminateTintList = ColorStateList.valueOf(0xFFE3B341.toInt()) }
         overlayButtons = LinearLayout(this).apply { gravity = Gravity.CENTER }
         overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(0xF005060F.toInt())
+            setBackgroundColor(0xF0050505.toInt())
             addView(overlayProgress)
             addView(overlayText, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
             addView(overlayButtons, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) })
@@ -264,9 +278,9 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         b.minimumHeight = dp(40)
         b.insetTop = 0
         b.insetBottom = 0
-        b.setTextColor(if (filled) 0xFF0E1026.toInt() else Color.WHITE)
-        if (filled) b.backgroundTintList = ColorStateList.valueOf(0xFF3EE6FF.toInt())
-        else b.strokeColor = ColorStateList.valueOf(0x663EE6FF)
+        b.setTextColor(if (filled) 0xFF0B0B0B.toInt() else Color.WHITE)
+        if (filled) b.backgroundTintList = ColorStateList.valueOf(0xFFE3B341.toInt())
+        else b.strokeColor = ColorStateList.valueOf(0x66E3B341)
         b.setOnClickListener { onClick(b) }
         b.layoutParams = LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(6) }
         return b
@@ -316,7 +330,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             if (vk in stickyMods) {
                 stickyMods.remove(vk); sendVk(vk, false); b.backgroundTintList = null
             } else {
-                stickyMods.add(vk); sendVk(vk, true); b.backgroundTintList = ColorStateList.valueOf(0x553EE6FF)
+                stickyMods.add(vk); sendVk(vk, true); b.backgroundTintList = ColorStateList.valueOf(0x55E3B341)
             }
         }.also { modButtons[vk] = it }
         row.addView(tap("Esc", KeyMap.VK_ESCAPE))
@@ -338,7 +352,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         for (f in 1..12) row.addView(tap("F$f", 0x6F + f))
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
-            background = GradientDrawable().apply { setColor(0xE60E1026.toInt()); cornerRadius = dp(16).toFloat() }
+            background = GradientDrawable().apply { setColor(0xE60B0B0B.toInt()); cornerRadius = dp(16).toFloat() }
             addView(row)
             visibility = View.GONE
         }
@@ -442,7 +456,9 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
                 if (isDestroyed || client !== c) return@runOnUiThread
                 if (result == null) {
                     connected = true
+                    ActiveSessions.names[device.id] = device.name
                     ActiveSessions.add(device.id)
+                    SessionService.update(this)
                     showOverlay(null)
                     if (settings.showStats) statsView.visibility = View.VISIBLE
                     root.removeCallbacks(statsTick)
@@ -501,8 +517,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
             settings.startWithAllMonitors || monitors.size == 1 -> canvas.showAll()
             else -> canvas.focus((monitors.firstOrNull { it.primary } ?: monitors.first()).id)
         }
-        showToolbar(true)
-        root.postDelayed({ if (connected) showToolbar(false) }, 5000)
+        showToolbar(false)  // straight to full screen; the handle or a three-finger tap shows the menu
         android.widget.Toast.makeText(this, "Pinch to zoom · two-finger double-tap switches screens · three-finger tap shows the menu",
             android.widget.Toast.LENGTH_LONG).show()
     }
@@ -535,6 +550,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
     override fun onDisconnected(reason: String) = runOnUiThread {
         connected = false
         ActiveSessions.remove(device.id)
+        SessionService.update(this)
         slots.values.forEach { it.running = false }
         showOverlay("Disconnected from ${device.name}\n\n$reason", false,
             "Reconnect" to { connect() }, "Close" to { finish() })
@@ -716,6 +732,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
         super.onDestroy()
         if (::root.isInitialized) root.removeCallbacks(statsTick)
         if (::device.isInitialized && connected) ActiveSessions.remove(device.id)
+        SessionService.update(this)
         connected = false
         val c = client
         client = null
@@ -726,6 +743,7 @@ class SessionActivity : AppCompatActivity(), NativeClient.Listener, MonitorCanva
 /** Which saved devices have a session window open in this app right now. */
 object ActiveSessions {
     private val counts = HashMap<String, Int>()
+    val names = HashMap<String, String>()
     var onChange: (() -> Unit)? = null
 
     @Synchronized fun add(id: String) { counts[id] = (counts[id] ?: 0) + 1; onChange?.invoke() }
@@ -735,4 +753,5 @@ object ActiveSessions {
         onChange?.invoke()
     }
     @Synchronized fun count(id: String) = counts[id] ?: 0
+    @Synchronized fun openIds(): List<String> = counts.keys.toList()
 }
