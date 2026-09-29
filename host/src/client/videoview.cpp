@@ -322,7 +322,10 @@ LRESULT VideoView::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 return TRUE;
             }
             break;
-        case WM_MOUSEMOVE: toRemote(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)); return 0;
+        case WM_MOUSEMOVE:
+            toRemote(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            if (input_.hover) input_.hover(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
+            return 0;
         case WM_LBUTTONDOWN: toRemote(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)); button(hl::MOUSE_LEFT, true); return 0;
         case WM_LBUTTONUP: button(hl::MOUSE_LEFT, false); return 0;
         case WM_RBUTTONDOWN: toRemote(GET_X_LPARAM(lp), GET_Y_LPARAM(lp)); button(hl::MOUSE_RIGHT, true); return 0;

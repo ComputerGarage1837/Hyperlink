@@ -27,6 +27,7 @@ public:
         std::function<void(uint8_t button, bool down)> button;
         std::function<void(int dy, int dx)> scroll;
         std::function<void()> focusParent;
+        std::function<void(int x, int y)> hover;  // pointer position in the view (for the toolbar)
     };
 
     VideoView(HWND parent, const hl::MonitorInfo& monitor, Input input);

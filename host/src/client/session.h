@@ -14,6 +14,7 @@
 #include "devices.h"
 #include "hyperlink/client.h"
 #include "videoview.h"
+#include "../ui/web.h"
 
 class SessionWindow : public hl::ClientListener {
 public:
@@ -21,6 +22,8 @@ public:
     static void open(const SavedDevice& d);
     static void registerClasses(HINSTANCE inst);
     static int openCount();
+    // Brings an open session for this saved device to the front. False if there is none.
+    static bool bringToFront(const std::string& deviceId);
 
     // hl::ClientListener (network threads): forwarded to the window thread.
     void onMonitors(const std::vector<hl::MonitorInfo>& m) override;
@@ -50,7 +53,10 @@ private:
     void layout();
     void syncStreams();
     void stopAll();
-    void buildMenu();
+    void buildMenu();       // toolbar state (or the classic menu when WebView2 is missing)
+    void pushToolbar();
+    void showToolbar(bool show);
+    void onToolbarMessage(const std::string& m);
     void popOut(uint32_t monitorId);
     void popIn(HWND popout);
     void toggleFullscreen(HWND w);
@@ -80,4 +86,10 @@ private:
     bool cursorVisible_ = true;
     bool showStats_ = true;
     std::map<HWND, WINDOWPLACEMENT> fullscreen_;
+    std::unique_ptr<web::Panel> toolbar_;
+    bool useMenu_ = false;       // WebView2 unavailable: fall back to a menu bar
+    bool toolbarShown_ = false;
+    bool toolbarMenuOpen_ = false;
+    int toolbarExtra_ = 0;       // extra height while one of its drop-down menus is open
+    std::wstring stats_;
 };

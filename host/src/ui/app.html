@@ -1,0 +1,235 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hyperlink</title>
+<style>
+  :root {
+    --bg: #0b0b0b; --panel: #141210; --card: #1a1713; --card-hi: #221e17; --line: #2c261b;
+    --gold: #e3b341; --gold-soft: #b8923a; --gold-dim: rgba(227,179,65,.14);
+    --text: #f5ecd6; --muted: #a99f88; --faint: #6f6757;
+    --ok: #4ade80; --busy: #fbbf24; --off: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 14px; padding: 18px 28px 12px; }
+  header svg { width: 34px; height: 34px; flex: none; }
+  header h1 { margin: 0; font: 600 21px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: .2px; }
+  header .ver { color: var(--faint); font-size: 12px; margin-left: 2px; }
+  nav { margin-left: auto; display: flex; gap: 4px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 3px; }
+  nav button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 16px; border-radius: 7px; cursor: pointer; }
+  nav button.on { background: var(--gold-dim); color: var(--gold); }
+  main { flex: 1; overflow: auto; padding: 6px 28px 28px; }
+  main::-webkit-scrollbar { width: 10px; } main::-webkit-scrollbar-thumb { background: #2a251c; border-radius: 5px; }
+  h2 { font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold-soft);
+    margin: 22px 0 10px; display: flex; align-items: center; gap: 10px; }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+  .card { background: linear-gradient(180deg, var(--card-hi), var(--card)); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px 16px 14px; display: flex; flex-direction: column; gap: 6px;
+    transition: border-color .15s, transform .15s; }
+  .card:hover { border-color: #4a3d20; }
+  .card .top { display: flex; align-items: center; gap: 10px; }
+  .card .name { font-size: 16px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .icon { width: 36px; height: 36px; border-radius: 10px; background: var(--gold-dim); display: grid; place-items: center; flex: none; }
+  .icon svg { width: 20px; height: 20px; }
+  .detail { color: var(--muted); font-size: 12.5px; min-height: 18px; }
+  .status { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--off); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 8px rgba(74,222,128,.5); }
+  .dot.busy { background: var(--busy); box-shadow: 0 0 8px rgba(251,191,36,.5); }
+  .actions { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .btn { font: inherit; border-radius: 9px; padding: 7px 16px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); }
+  .btn:hover { border-color: var(--gold-soft); }
+  .btn.gold { background: linear-gradient(180deg, #ecc257, #d6a531); color: #1a1406; border: 0; font-weight: 600; }
+  .btn.gold:hover { filter: brightness(1.07); }
+  .btn.ghost { background: none; border-color: transparent; color: var(--muted); padding: 7px 10px; }
+  .btn.ghost:hover { color: var(--gold); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .spacer { flex: 1; }
+  .empty { color: var(--muted); padding: 18px; border: 1px dashed var(--line); border-radius: 14px; }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 10px 18px; align-items: center; }
+  .kv .k { color: var(--muted); }
+  .pin { font: 600 26px "Cascadia Mono", Consolas, monospace; letter-spacing: 6px; color: var(--gold); }
+  input[type=text], input[type=password] { font: inherit; color: var(--text); background: #0f0e0c; border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 11px; width: 100%; outline: none; }
+  input:focus { border-color: var(--gold-soft); }
+  label.check { display: flex; gap: 10px; align-items: center; color: var(--text); cursor: pointer; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 12px; }
+  .note { color: var(--muted); font-size: 12.5px; }
+  .menu { position: fixed; background: #1c1914; border: 1px solid #3a3122; border-radius: 10px; padding: 5px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.6); z-index: 20; min-width: 190px; }
+  .menu div { padding: 8px 12px; border-radius: 7px; cursor: pointer; }
+  .menu div:hover { background: var(--gold-dim); color: var(--gold); }
+  .veil { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: grid; place-items: center; z-index: 30; }
+  .dialog { width: min(440px, 92vw); background: #17140f; border: 1px solid #3a3122; border-radius: 16px; padding: 22px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.7); display: flex; flex-direction: column; gap: 12px; }
+  .dialog h3 { margin: 0 0 4px; font-size: 17px; }
+  .dialog .row { display: flex; flex-direction: column; gap: 5px; }
+  .dialog .row span { color: var(--muted); font-size: 12.5px; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1f1b14; border: 1px solid #4a3d20;
+    color: var(--text); padding: 9px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#141210"/>
+    <rect x="19" y="14" width="33" height="21" rx="3.5" fill="none" stroke="#8c6822" stroke-width="3.5"/>
+    <rect x="12" y="26" width="33" height="21" rx="3.5" fill="#0e0c08" stroke="#e3b341" stroke-width="3.5"/>
+    <path d="M20 32l6 4.5-6 4.5M28 32l6 4.5-6 4.5" fill="none" stroke="#faecc8" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="25" y="50" width="8" height="2.5" rx="1.2" fill="#e3b341"/></svg>
+  <h1>Hyperlink <span class="ver" id="ver"></span></h1>
+  <nav><button id="tabDevices" class="on">Devices</button><button id="tabPc">This PC</button></nav>
+</header>
+<main>
+  <section id="devices">
+    <h2>My devices</h2>
+    <div class="grid" id="saved"></div>
+    <h2>Found on your network</h2>
+    <div class="grid" id="found"></div>
+    <div class="actions" style="margin-top:16px"><button class="btn" id="addManual">Add by address…</button></div>
+  </section>
+  <section id="pc" hidden>
+    <h2>This PC</h2>
+    <div class="panel kv">
+      <div class="k">Name other devices see</div><div><input type="text" id="pcName"></div>
+      <div class="k">PIN</div><div style="display:flex;gap:14px;align-items:center"><span class="pin" id="pcPin"></span>
+        <button class="btn ghost" id="pinEdit">Change</button></div>
+      <div class="k">Connected now</div><div id="pcClients" class="note"></div>
+      <div class="k">Home network</div><div id="pcLan" class="note"></div>
+      <div class="k">Away from home</div><div id="pcTs" class="note"></div>
+    </div>
+    <h2>Updates</h2>
+    <div class="panel" style="display:flex;flex-direction:column;gap:12px">
+      <label class="check"><input type="checkbox" id="autoUpd"> Check for updates when Hyperlink starts</label>
+      <div class="actions" style="margin:0"><button class="btn gold" id="checkUpd">Check for updates</button>
+        <span class="note" id="updStatus"></span><span class="spacer"></span><button class="btn ghost" id="openLog">Open log</button></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+const send = o => window.chrome.webview.postMessage(JSON.stringify(o));
+let state = { devices: [], found: [], pc: {} };
+
+const pcIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="#e3b341" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>';
+const phoneIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="#e3b341" stroke-width="1.8"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M11 18.5h2"/></svg>';
+
+function toast(t) { const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove('show'), 2600); }
+function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function statusOf(d) {
+  if (!d.online) return ['', 'Offline'];
+  if (d.clients > 0) return ['busy', `In use · ${d.clients} connected, ${d.streams} screen${d.streams == 1 ? '' : 's'}`];
+  return ['ok', 'Online · ready'];
+}
+
+function card(d, saved) {
+  const [cls, text] = statusOf(d);
+  const icon = /phone|android|galaxy|pixel|sm-/i.test(d.name + ' ' + (d.hostName || '')) ? phoneIcon : pcIcon;
+  const c = el(`<div class="card">
+    <div class="top"><div class="icon">${icon}</div><div class="name">${escHtml(d.name)}</div>
+      ${saved ? '<button class="btn ghost more" title="More">•••</button>' : ''}</div>
+    <div class="status"><span class="dot ${cls}"></span>${escHtml(text)}</div>
+    <div class="detail">${escHtml(d.detail || '')}</div>
+    <div class="actions">${saved
+      ? '<button class="btn gold go">Connect</button><button class="btn win">New window</button>'
+      : '<button class="btn gold add">Add</button>'}</div></div>`);
+  if (saved) {
+    c.querySelector('.go').onclick = () => send({ cmd: 'connect', id: d.id });
+    c.querySelector('.win').onclick = () => send({ cmd: 'connect', id: d.id, newWindow: true });
+    c.querySelector('.more').onclick = e => menu(e, [
+      ['Edit name, PIN or address', () => editDialog(d)],
+      ['Remove', () => { if (confirm(`Remove ${d.name}?`)) send({ cmd: 'remove', id: d.id }); }],
+    ]);
+    c.ondblclick = () => send({ cmd: 'connect', id: d.id });
+  } else {
+    c.querySelector('.add').onclick = () => editDialog({ hostId: d.hostId, name: d.name, pin: '', address: '' }, true);
+  }
+  return c;
+}
+
+function render() {
+  $('#ver').textContent = state.pc.version ? 'v' + state.pc.version : '';
+  const saved = $('#saved'), found = $('#found');
+  saved.replaceChildren(); found.replaceChildren();
+  if (!state.devices.length) saved.append(el('<div class="empty">No devices yet. Devices running Hyperlink on your network appear below; click <b>Add</b> and enter the PIN they show.</div>'));
+  state.devices.forEach(d => saved.append(card(d, true)));
+  if (!state.found.length) found.append(el('<div class="empty">Looking for devices running Hyperlink…</div>'));
+  state.found.forEach(d => found.append(card(d, false)));
+  const pc = state.pc;
+  if (document.activeElement !== $('#pcName')) $('#pcName').value = pc.name || '';
+  $('#pcPin').textContent = pc.pin || 'none';
+  $('#pcClients').textContent = pc.clients && pc.clients.length ? pc.clients.join(', ') : 'Nobody';
+  $('#pcLan').textContent = pc.lan || '';
+  $('#pcTs').textContent = pc.tailscale ? `Tailscale ${pc.tailscale}: reachable from anywhere` : 'Install Tailscale to connect from outside your home network';
+  $('#autoUpd').checked = !!pc.autoUpdate;
+  $('#updStatus').textContent = pc.updateStatus || '';
+}
+
+function menu(ev, items) {
+  document.querySelectorAll('.menu').forEach(m => m.remove());
+  const m = el('<div class="menu"></div>');
+  items.forEach(([t, f]) => { const i = el(`<div>${escHtml(t)}</div>`); i.onclick = () => { m.remove(); f(); }; m.append(i); });
+  document.body.append(m);
+  const r = ev.target.getBoundingClientRect();
+  m.style.left = Math.min(r.left, innerWidth - 210) + 'px'; m.style.top = (r.bottom + 4) + 'px';
+  setTimeout(() => document.addEventListener('click', () => m.remove(), { once: true }));
+}
+
+function editDialog(d, isNew) {
+  const v = el(`<div class="veil"><div class="dialog">
+    <h3>${isNew ? 'Add ' + escHtml(d.name || 'a device') : 'Edit ' + escHtml(d.name)}</h3>
+    <div class="row"><span>Name (anything you like)</span><input type="text" id="dName" value="${escHtml(d.name || '')}"></div>
+    <div class="row"><span>PIN shown on that device</span><input type="password" id="dPin" value="${escHtml(d.pin || '')}"></div>
+    <div class="row"><span>Fallback address (optional: Tailscale or host name)</span><input type="text" id="dAddr" value="${escHtml(d.address || '')}"></div>
+    <div class="note">Devices on your network are found automatically, and after the first connection they are
+      found through Tailscale too, so you normally leave the address empty.</div>
+    <div class="actions"><span class="spacer"></span><button class="btn cancel">Cancel</button><button class="btn gold save">Save</button></div>
+  </div></div>`);
+  document.body.append(v);
+  v.querySelector('#' + (isNew ? 'dPin' : 'dName')).focus();
+  const close = () => v.remove();
+  v.querySelector('.cancel').onclick = close;
+  v.onclick = e => { if (e.target === v) close(); };
+  const save = () => {
+    const name = v.querySelector('#dName').value.trim(), pin = v.querySelector('#dPin').value.trim(), address = v.querySelector('#dAddr').value.trim();
+    if (!d.hostId && !address) { toast('Enter an address, or pick the device from “Found on your network”.'); return; }
+    send({ cmd: 'save', id: d.id || '', hostId: d.hostId || '', name: name || d.name || address, pin, address });
+    close();
+  };
+  v.querySelector('.save').onclick = save;
+  v.addEventListener('keydown', e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') close(); });
+}
+
+$('#addManual').onclick = () => editDialog({ name: '', pin: '', address: '' }, true);
+$('#tabDevices').onclick = () => { $('#devices').hidden = false; $('#pc').hidden = true; $('#tabDevices').classList.add('on'); $('#tabPc').classList.remove('on'); };
+$('#tabPc').onclick = () => { $('#devices').hidden = true; $('#pc').hidden = false; $('#tabPc').classList.add('on'); $('#tabDevices').classList.remove('on'); };
+$('#pcName').onchange = () => send({ cmd: 'thisPc', name: $('#pcName').value.trim() });
+$('#pinEdit').onclick = () => {
+  const p = prompt('New PIN for this PC (leave empty to allow anyone):', state.pc.pin || '');
+  if (p !== null) send({ cmd: 'thisPc', pin: p.trim() });
+};
+$('#autoUpd').onchange = () => send({ cmd: 'thisPc', autoUpdate: $('#autoUpd').checked });
+$('#checkUpd').onclick = () => send({ cmd: 'checkUpdates' });
+$('#openLog').onclick = () => send({ cmd: 'openLog' });
+
+window.chrome.webview.addEventListener('message', e => {
+  const m = JSON.parse(e.data);
+  if (m.type === 'state') { state = m; render(); }
+  else if (m.type === 'toast') toast(m.text);
+  else if (m.type === 'showPc') $('#tabPc').click();
+});
+render();
+send({ cmd: 'ready' });
+</script>
+</body>
+</html>

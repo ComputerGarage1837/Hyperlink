@@ -1,5 +1,7 @@
 #include "session.h"
 
+#include <windowsx.h>
+
 #include <algorithm>
 #include <thread>
 
@@ -7,6 +9,8 @@
 #include "../settings.h"
 #include "hyperlink/common.h"
 #include "ui.h"
+#include "../resource.h"
+#include "hyperlink/json.h"
 
 namespace {
 
@@ -36,6 +40,7 @@ enum : UINT {
 const wchar_t* kMain = L"HyperlinkSession";
 const wchar_t* kPopout = L"HyperlinkPopout";
 std::set<HWND> gWindows;  // session and pop-out windows, for the keyboard hook
+std::map<std::string, HWND> gByDevice;  // open main session window per saved device
 HHOOK gHook = nullptr;
 int gOpen = 0;
 
@@ -80,6 +85,14 @@ LRESULT CALLBACK keyboardHook(int code, WPARAM wp, LPARAM lp) {
 
 int SessionWindow::openCount() { return gOpen; }
 
+bool SessionWindow::bringToFront(const std::string& deviceId) {
+    auto it = gByDevice.find(deviceId);
+    if (it == gByDevice.end() || !IsWindow(it->second)) return false;
+    if (IsIconic(it->second)) ShowWindow(it->second, SW_RESTORE);
+    SetForegroundWindow(it->second);
+    return true;
+}
+
 void SessionWindow::registerClasses(HINSTANCE inst) {
     WNDCLASSEXW wc{sizeof wc};
     wc.lpfnWndProc = proc;
@@ -105,6 +118,18 @@ SessionWindow::SessionWindow(const SavedDevice& d) : device_(d), client_(this) {
                               GetModuleHandleW(nullptr), nullptr);
     SendMessageW(status_, WM_SETFONT, (WPARAM)ui::font(hwnd_), TRUE);
     gWindows.insert(hwnd_);
+    if (!d.id.empty()) gByDevice[d.id] = hwnd_;
+    web::styleWindow(hwnd_);
+    toolbar_ = std::make_unique<web::Panel>(
+        hwnd_, web::loadHtml(IDR_TOOLBAR_HTML), [this](const std::string& m) { onToolbarMessage(m); },
+        [this](bool ok) {
+            if (!ok) {
+                useMenu_ = true;
+                toolbar_.reset();
+                buildMenu();
+            }
+        });
+    toolbar_->show(false);
     if (!gHook) gHook = SetWindowsHookExW(WH_KEYBOARD_LL, keyboardHook, GetModuleHandleW(nullptr), 0);
     buildMenu();
     ShowWindow(hwnd_, SW_SHOW);
@@ -235,6 +260,15 @@ void SessionWindow::setMonitors(const std::vector<hl::MonitorInfo>& m) {
             if (!top) top = self;
             SetFocus(top);
         };
+        uint32_t monId = m[i].id;
+        in.hover = [this, monId](int x, int y) {
+            // Pointer at the very top of the window: slide the toolbar in.
+            Screen* sc = screenFor(monId);
+            if (!sc || sc->popout || toolbarShown_) return;
+            POINT p{x, y};
+            MapWindowPoints(sc->view->hwnd(), hwnd_, &p, 1);
+            if (p.y <= ui::scale(hwnd_, 6)) showToolbar(true);
+        };
         s.view = std::make_shared<VideoView>(hwnd_, m[i], in);
         screens_.push_back(std::move(s));
     }
@@ -329,6 +363,10 @@ void SessionWindow::stopAll() {
 }
 
 void SessionWindow::buildMenu() {
+    if (!useMenu_) {
+        pushToolbar();
+        return;
+    }
     HMENU bar = CreateMenu();
     HMENU view = CreatePopupMenu();
     AppendMenuW(view, MF_STRING | (focused_ < 0 ? MF_CHECKED : 0), IDM_ALL, L"All screens");
@@ -364,6 +402,57 @@ void SessionWindow::buildMenu() {
     HMENU old = GetMenu(hwnd_);
     SetMenu(hwnd_, bar);
     if (old) DestroyMenu(old);
+}
+
+void SessionWindow::pushToolbar() {
+    if (!toolbar_) return;
+    std::string j = "{\"type\":\"state\",\"title\":\"" + web::esc(device_.name) + "\",\"focused\":" +
+                    std::to_string(focused_) + ",\"fullscreen\":" + (fullscreen_.count(hwnd_) ? "true" : "false") +
+                    ",\"stats\":\"" + web::esc(toUtf8(stats_)) + "\",\"screens\":[";
+    for (size_t i = 0; i < screens_.size(); i++) {
+        j += (i ? "," : "") + std::string("{\"name\":\"") + web::esc(screens_[i].info.name) + "\",\"hidden\":" +
+             (hidden_.count(screens_[i].info.id) ? "true" : "false") + ",\"popped\":" +
+             (screens_[i].popout ? "true" : "false") + "}";
+    }
+    toolbar_->post(j + "]}");
+}
+
+void SessionWindow::showToolbar(bool show) {
+    if (!toolbar_ || useMenu_) return;
+    if (show == toolbarShown_ && !show) return;
+    toolbarShown_ = show;
+    RECT rc;
+    GetClientRect(hwnd_, &rc);
+    int h = ui::scale(hwnd_, 44) + (toolbarMenuOpen_ ? toolbarExtra_ : 0);
+    rc.bottom = std::min<LONG>(rc.bottom, h);
+    toolbar_->resize(rc);
+    toolbar_->show(show);
+    if (show) {
+        // Keep the video windows underneath the toolbar.
+        for (auto& s : screens_)
+            if (!s.popout) SetWindowPos(s.view->hwnd(), HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        pushToolbar();
+    }
+}
+
+void SessionWindow::onToolbarMessage(const std::string& m) {
+    hl::json::Value v;
+    if (!hl::json::parse(m, v)) return;
+    std::string cmd = v["cmd"].type == hl::json::Value::String ? v["cmd"].str : "";
+    if (cmd == "ready") {
+        pushToolbar();
+    } else if (cmd == "menuOpen") {
+        toolbarMenuOpen_ = true;
+        toolbarExtra_ = ui::scale(hwnd_, (int)v["height"].asNumber(200));
+        showToolbar(true);
+    } else if (cmd == "menuClosed") {
+        toolbarMenuOpen_ = false;
+        showToolbar(toolbarShown_);
+    } else if (cmd == "leave") {
+        if (!toolbarMenuOpen_) showToolbar(false);
+    } else if (v["cmd"].type == hl::json::Value::Number) {
+        PostMessageW(hwnd_, WM_COMMAND, (WPARAM)(int)v["cmd"].num, 0);
+    }
 }
 
 void SessionWindow::popOut(uint32_t id) {
@@ -406,7 +495,7 @@ void SessionWindow::toggleFullscreen(HWND w) {
         MONITORINFO mi{sizeof mi};
         GetMonitorInfoW(MonitorFromWindow(w, MONITOR_DEFAULTTONEAREST), &mi);
         SetWindowLongW(w, GWL_STYLE, GetWindowLongW(w, GWL_STYLE) & ~WS_OVERLAPPEDWINDOW);
-        if (w == hwnd_) SetMenu(hwnd_, nullptr);
+        if (w == hwnd_ && useMenu_) SetMenu(hwnd_, nullptr);
         SetWindowPos(w, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
                      mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     } else {
@@ -414,6 +503,7 @@ void SessionWindow::toggleFullscreen(HWND w) {
         SetWindowPlacement(w, &it->second);
         fullscreen_.erase(it);
         if (w == hwnd_) buildMenu();
+        showToolbar(false);
         SetWindowPos(w, nullptr, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
     }
@@ -454,9 +544,11 @@ void SessionWindow::updateTitle() {
             n++;
         }
         wchar_t b[200];
-        swprintf(b, 200, L"  -  %d screen%s  %.0f fps  %.0f Mb/s  PC %.1f ms  network %.1f ms  decode %.1f ms", n,
-                 n == 1 ? L"" : L"s", fps, mbps, host, client_.rttMs() / 2, decode);
-        t += b;
+        swprintf(b, 200, L"%.0f fps  %.0f Mb/s  PC %.1f ms  net %.1f ms  decode %.1f ms", fps, mbps, host,
+                 client_.rttMs() / 2, decode);
+        stats_ = b;
+        t += L"  -  " + stats_;
+        if (toolbarShown_) pushToolbar();
     }
     SetWindowTextW(hwnd_, (L"Hyperlink - " + t).c_str());
 }
@@ -518,10 +610,23 @@ LRESULT SessionWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case WM_SIZE:
             layout();
             syncStreams();
+            if (toolbarShown_) showToolbar(true);
             return 0;
         case WM_TIMER:
             updateTitle();
+            if (toolbarShown_ && !toolbarMenuOpen_) {
+                // Hide the toolbar once the pointer has left it.
+                POINT p;
+                GetCursorPos(&p);
+                ScreenToClient(hwnd_, &p);
+                RECT rc;
+                GetClientRect(hwnd_, &rc);
+                if (p.y > ui::scale(hwnd_, 60) || p.x < 0 || p.x > rc.right || GetForegroundWindow() != hwnd_) showToolbar(false);
+            }
             return 0;
+        case WM_MOUSEMOVE:
+            if (GET_Y_LPARAM(lp) <= ui::scale(hwnd_, 6)) showToolbar(true);
+            break;
         case WM_KEYDOWN: case WM_KEYUP: case WM_SYSKEYDOWN: case WM_SYSKEYUP:
             if (keyEvent(msg, wp, lp)) return 0;
             break;
@@ -668,6 +773,9 @@ LRESULT SessionWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         case WM_DESTROY: {
             KillTimer(hwnd_, 1);
+            for (auto it = gByDevice.begin(); it != gByDevice.end();)
+                it = it->second == hwnd_ ? gByDevice.erase(it) : std::next(it);
+            toolbar_.reset();
             gWindows.erase(hwnd_);
             stopAll();
             client_.disconnect();

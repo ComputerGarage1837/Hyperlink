@@ -116,9 +116,16 @@ jobs:
           dir=$(find "$RUNNER_TEMP/ffmpeg" -maxdepth 1 -mindepth 1 -type d | head -n1)
           echo "FFMPEG_DIR=$(cygpath -m "$dir")" >> "$GITHUB_ENV"
 
+      - name: Download WebView2 SDK
+        run: |
+          set -euo pipefail
+          curl -sSL -o "$RUNNER_TEMP/wv2.zip" https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40
+          7z x -y -o"$RUNNER_TEMP/webview2" "$RUNNER_TEMP/wv2.zip" >/dev/null
+          echo "WEBVIEW2_DIR=$(cygpath -m "$RUNNER_TEMP/webview2")" >> "$GITHUB_ENV"
+
       - name: Configure & build
         run: |
-          cmake -S . -B build -A x64 -DFFMPEG_DIR="$FFMPEG_DIR"
+          cmake -S . -B build -A x64 -DFFMPEG_DIR="$FFMPEG_DIR" -DWEBVIEW2_DIR="$WEBVIEW2_DIR"
           cmake --build build --config Release -j 4
 
       - name: Core tests (Windows)

@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.0 — 2026-09-29
+
+- **New look: black and gold**, on Windows and Android, with a new icon.
+- **Windows:** a modern Hyperlink window replaces the old list: device cards with live status,
+  devices found on your network, and a **This PC** page (name, PIN, network and Tailscale
+  status, updates). Connection windows have a dark title bar and a slim toolbar that slides in
+  when you move the pointer to the top edge (screens, show/hide, new window, keys, full screen,
+  stats, disconnect), with no menu bar in the way.
+- **Share your phone:** the Android app can now be viewed and controlled from a PC or another
+  phone. Tap **Share this phone** on the home screen (Android asks each time), and switch on
+  **Hyperlink remote control** once to allow taps, swipes, scrolling and typing. The phone shows
+  up in the PC's device list like any other device, at home and over Tailscale.
+- **Android sessions open straight into full screen**, and stay connected while you use other
+  apps (a notification brings you back). Tapping a device that's already open returns to it.
+
 ## v0.2.0 — 2026-09-29
 
 - **Windows can now connect to other devices too.** One app: it still hosts this PC from the

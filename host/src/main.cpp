@@ -19,6 +19,7 @@
 #include "settings.h"
 #include "updater.h"
 #include "client/roster.h"
+#include "ui/home.h"
 #include "client/videoview.h"
 
 extern "C" {
@@ -120,7 +121,11 @@ void refreshStatus() {
     }
 }
 
+std::string gUpdateText;
+
 void setUpdateStatus(const std::wstring& s) {
+    gUpdateText = toUtf8(s);
+    home::refresh();
     if (gSettingsWnd) SetDlgItemTextW(gSettingsWnd, IDF_STATUS, s.c_str());
 }
 
@@ -319,7 +324,7 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
         case WM_APP_TRAY:
             switch (LOWORD(lp)) {
-                case WM_LBUTTONDBLCLK: roster::show(); break;
+                case WM_LBUTTONDBLCLK: home::show(); break;
                 case WM_RBUTTONUP:
                 case WM_CONTEXTMENU: showMenu(); break;
                 case NIN_BALLOONUSERCLICK: checkForUpdates(true); break;
@@ -327,9 +332,9 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             return 0;
         case WM_COMMAND:
             switch (LOWORD(wp)) {
-                case IDM_OPEN: roster::show(); break;
-                case IDM_SETTINGS: showSettings(); break;
-                case IDM_UPDATES: showSettings(); checkForUpdates(true); break;
+                case IDM_OPEN: home::show(); break;
+                case IDM_SETTINGS: home::show(true); break;
+                case IDM_UPDATES: home::show(true); checkForUpdates(true); break;
                 case IDM_LOG: ShellExecuteW(nullptr, L"open", (dataDir() + L"\\host.log").c_str(), nullptr,
                                             nullptr, SW_SHOWNORMAL); break;
                 case IDM_EXIT: DestroyWindow(h); break;
@@ -339,7 +344,7 @@ LRESULT CALLBACK msgProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             refreshStatus();
             return 0;
         case WM_APP_OPEN:
-            roster::show();
+            home::show();
             return 0;
         case WM_APP_UPDATE_FOUND:
             if (!wp) {  // found by the startup check: don't pop a dialog, just tell
@@ -441,6 +446,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_LISTVIEW_CLASSES};
     InitCommonControlsEx(&icc);
     timeBeginPeriod(1);
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);  // WebView2 needs an STA UI thread
     SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
     raiseGpuPriority();
     openLog();
@@ -477,6 +483,15 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     };
     hooks.thisHostId = [] { return gServer->settings().hostId; };
     roster::registerClasses(inst, hooks);
+    home::Hooks hh;
+    hh.settings = [] { return gServer->settings(); };
+    hh.saveSettings = [](const HostSettings& s) { gServer->updateSettings(s); refreshStatus(); };
+    hh.clients = [] { return gServer->status().clients; };
+    hh.checkForUpdates = [] { checkForUpdates(true); };
+    hh.updateStatus = [] { return gUpdateText; };
+    hh.openLog = [] { ShellExecuteW(nullptr, L"open", (dataDir() + L"\\host.log").c_str(), nullptr, nullptr, SW_SHOWNORMAL); };
+    hh.fallback = [] { roster::show(); };
+    home::init(inst, hh);
     gMsgWnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, inst, nullptr);
 
     gNid.cbSize = sizeof gNid;
@@ -496,13 +511,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     auto settings = gServer->settings();
     bool firstRun = GetFileAttributesW((dataDir() + L"\\shown-welcome").c_str()) == INVALID_FILE_ATTRIBUTES;
-    if (!background) roster::show();
+    if (!background) home::show();
     if (firstRun) {
         CloseHandle(CreateFileW((dataDir() + L"\\shown-welcome").c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                 0, nullptr));
-        showSettings();
-    } else {
-        balloon(L"Hyperlink Host is running", L"PIN " + (settings.pin.empty() ? L"not set" : W(settings.pin)) +
+        home::show(true);  // first run: show this PC's name and PIN
+    } else if (background) {
+        balloon(L"Hyperlink is running", L"PIN " + (settings.pin.empty() ? L"not set" : W(settings.pin)) +
                                                  L" - " + W(addressesText()));
     }
     if (settings.checkUpdatesOnStart) checkForUpdates(false);

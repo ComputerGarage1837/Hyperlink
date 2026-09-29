@@ -3,6 +3,8 @@
 #include "version.h"
 
 IDI_APP ICON "hyperlink.ico"
+IDR_APP_HTML RCDATA "../src/ui/app.html"
+IDR_TOOLBAR_HTML RCDATA "../src/ui/toolbar.html"
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "host.manifest"
 
 VS_VERSION_INFO VERSIONINFO

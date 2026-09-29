@@ -1,6 +1,11 @@
 # Hyperlink Host (Windows). Needs FFmpeg (shared build): set FFMPEG_DIR to a folder with
 # include/, lib/ and bin/ (the CI downloads a BtbN build).
 set(FFMPEG_DIR "" CACHE PATH "FFmpeg SDK folder (include, lib, bin)")
+# WebView2 SDK (the Microsoft.Web.WebView2 NuGet package, unzipped) for the modern UI.
+set(WEBVIEW2_DIR "" CACHE PATH "WebView2 SDK folder (contains build/native)")
+if(NOT WEBVIEW2_DIR)
+    message(FATAL_ERROR "Set WEBVIEW2_DIR to the unzipped Microsoft.Web.WebView2 package")
+endif()
 if(NOT FFMPEG_DIR)
     message(FATAL_ERROR "Set FFMPEG_DIR to an FFmpeg shared build")
 endif()
@@ -22,9 +27,11 @@ add_executable(HyperlinkHost WIN32
     src/client/session.cpp
     src/client/ui.cpp
     src/client/videoview.cpp
+    src/ui/home.cpp
+    src/ui/web.cpp
     res/host.rc
 )
-target_include_directories(HyperlinkHost PRIVATE src "${FFMPEG_DIR}/include")
+target_include_directories(HyperlinkHost PRIVATE src "${FFMPEG_DIR}/include" "${WEBVIEW2_DIR}/build/native/include")
 target_link_directories(HyperlinkHost PRIVATE "${FFMPEG_DIR}/lib")
 target_compile_definitions(HyperlinkHost PRIVATE
     UNICODE _UNICODE
@@ -33,6 +40,7 @@ configure_file(res/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 target_include_directories(HyperlinkHost PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(HyperlinkHost PRIVATE
     hyperlink_core avcodec avutil
+    "${WEBVIEW2_DIR}/build/native/x64/WebView2LoaderStatic.lib" dwmapi version
     d3d11 dxgi uuid avrt winmm winhttp bcrypt comctl32 shell32 user32 gdi32 ole32 shcore)
 if(MSVC)
     target_compile_options(HyperlinkHost PRIVATE /W3)
