@@ -1,97 +1,49 @@
-<p align="center"><img src="branding/hyperlink-icon-256.png" width="128" alt="Hyperlink"></p>
-
 # Hyperlink
 
-Fast remote desktop for your own PCs: a Windows host that streams its screens with the GPU's
-video encoder, and an Android app that shows them at up to 120 fps.
+A portable Windows remote desktop draft for your own computers and a small, trusted family group. This is a replacement foundation, version **0.1.0**, not the security-audited finished product.
 
-## What you get
+## Run the draft
 
-- **Smooth**: hardware encoding on the PC (NVIDIA NVENC, AMD AMF, Intel Quick Sync), hardware
-  decoding on the phone, a UDP transport with forward error correction, and every step tuned
-  for latency. The phone runs its display at its highest refresh rate while connected.
-- **Every monitor**: see all of a PC's screens together, laid out the way they sit on the desk,
-  or one at a time. Tap a screen or pick it from the toolbar to switch.
-- **Separate windows**: every connection opens in its own window, so you can be connected to several
-  PCs at once, or open each monitor of a PC in its own window (split screen, freeform windows, DeX).
-- **Your devices, remembered**: give each PC your own name and its PIN once. The list shows whether each PC
-  is online, and whether someone is already connected and streaming. PCs on your network
-  appear by themselves.
-- **Updates from GitHub**: both apps have an Update button (and an optional check on start) that
-  installs the latest release from this repository.
+Use Windows 11 x64 with .NET Framework 4.8. Extract the whole ZIP into a writable folder and open **Hyperlink.exe**. There is no installer, automatic startup, router configuration, or cloud signup.
 
-## Install
+1. Open Hyperlink on the computer you want to view. Click **Start hosting**.
+2. Click **Create invitation**, choose its reachable LAN or private-VPN address, then **Generate and copy invitation**. Share it privately. It expires after five minutes and works once.
+3. Open Hyperlink on your viewing computer. Click **Add a computer**, paste the invitation, and request pairing.
+4. Approve the named computer **locally on the host**. Choose view-only or view-and-control rights.
+5. On the viewer, click **Connect**. The host must approve this session locally. Click the picture to focus keyboard input. The viewer can disconnect; the host can immediately **STOP SESSION**.
+6. Under **Access**, the host can revoke a paired computer. Revocation closes its current session and blocks future connections.
 
-1. On the PC: download `Hyperlink-Setup-<version>.exe` from [Releases](../../releases) and run it.
-   It adds a firewall rule and, if you leave the box ticked, starts Hyperlink Host when you sign
-   in (with admin rights, so it can also control admin windows). The first start shows the
-   **PIN**. You can change the PIN and the PC's name in Settings (double-click the tray icon).
-2. On the phone or tablet: download `Hyperlink-Android-<version>.apk` from the same release and
-   install it (allow installs from your browser or file manager when asked).
-3. Open the app. The PC shows up under **Found on your network**: tap **Add**, enter the PIN,
-   save, and tap **Connect**. For a PC somewhere else, add it by address. Tailscale or another VPN
-   works well; don't forward the ports on your router.
+Hosting is off on every app launch. The app must remain open on the host, and its ordinary Windows desktop must be unlocked. If Windows prompts for a firewall rule, allow only the private network you intend to use. The default TCP port is **45831**; it can be changed while hosting is off. Do not expose this draft directly to the public internet. No firewall rule is created automatically.
 
-## Using it
+The app displays the first available local network address, which may be a VPN or virtual adapter. Choose the address the viewer can reach. Paired computers retain their certificate identity when you edit a saved address. An offline computer produces a connection error; there is no fabricated online status.
 
-- **Touchpad mode** (default): drag to move the pointer, tap to click, tap with two fingers to
-  right-click, double-tap and drag to drag, drag with two fingers to scroll.
-- **Touch mode**: tap where you want to click; long-press to right-click.
-- **Three-finger tap** or the handle at the top shows the toolbar: switch screens, open a
-  new window, keyboard, extra keys (Ctrl, Alt, Win, arrows, F-keys, Task Manager, …), mouse
-  mode, stats, disconnect.
-- A Bluetooth or USB mouse and keyboard work directly.
+## Implemented
 
-## For 120 fps
+- Native Windows host and viewer, live JPEG screen capture, fitted rendering, selected display, full-screen viewer, pointer, buttons, scroll, and keyboard input.
+- Direct **TLS 1.2** with a pinned SHA-256 host certificate fingerprint. A changed, expired, or unexpected certificate is rejected; no insecure fallback is offered.
+- A random 192-bit, single-use, expiring pairing invitation and explicit host approval.
+- Persistent viewer RSA identities, signed random challenges bound to the host fingerprint and viewer identity, and host-enforced per-device grants. A device ID alone gives no access.
+- View-only enforcement, one active viewer per host, local session stop, revocation, and held-key/button cleanup on disconnect or focus loss.
+- Local identity, private key, and device metadata encrypted with Windows DPAPI for the current Windows account. Atomic settings saves.
+- Received frames are decoded and presented in a bounded UI queue. The viewer shows observed, distinct **presented frames per second**, not just the requested capture rate.
 
-- The PC's monitor must run at 120 Hz or faster: Windows only produces as many desktop frames as
-  the monitor shows.
-- The phone needs a 120 Hz screen. Hyperlink switches it to its fastest mode while connected.
-- Use 5 GHz or 6 GHz Wi-Fi or Ethernet. Turn on **Stats** in the toolbar to see frame rate,
-  bitrate, latency per stage and packet loss.
+## Draft boundaries
 
-## How it's built
+This engine uses Windows screen capture and JPEG with a **30 fps requested cap**, scaled to a maximum **1600 × 1000**. It does not establish sustained 30 fps on every machine and does not implement or prove 120 fps. Hardware encode/decode and the eventual native engine remain a measured engineering decision. The current engine is a functional first-draft prototype, not the final high-performance foundation.
 
-| Part | Folder | Tech |
-|---|---|---|
-| Shared core | `core/` | C++17: protocol, Reed-Solomon FEC, packetizer, client connection logic, tests |
-| Windows host | `host/` | C++17, DXGI Desktop Duplication, D3D11 video processor, FFmpeg (NVENC/AMF/QSV), WinHTTP |
-| Android app | `android/` | Kotlin UI, NDK C++ (the core plus MediaCodec decoding to a Surface) |
+The draft is attended, direct, and Windows-only. Invite-only user accounts, MFA, synchronized private family lists, relay/rendezvous, Android, a signed unattended service, secure-desktop/UAC/lock-screen control, audio, clipboard, file transfers, headless capture, signed updates, and the blueprint's later features are still planned. UAC and lock screens require local action; capture stops on protected desktops. App shutdown or a capture/transport error ends the session. Reconnection requires fresh local approval.
 
-Ports: TCP 47800 (control), UDP 47801 (video), UDP 47802 (discovery and status).
+The EXE is **unsigned**. This build has not passed an independent security review or cross-machine field testing. Do not treat it as the trusted family release. See [the roadmap](docs/ROADMAP.md) for the remaining blueprint milestones.
 
-## Building
+The adjacent **Data/identity.dat** belongs to this Windows user and contains the app's protected identity and remembered computers. Keep the Data folder across upgrades. Copying it to a different Windows account will not transfer the identity; a second user must pair separately. Removing it resets the identity and requires new pairing. Invitations are private credentials; share them only with the intended recipient. Screens and keystrokes are never written to a diagnostic log by the app.
 
-Everything builds on GitHub Actions (`.github/workflows/build.yml`) on every push: core tests on
-Linux and Windows, the Android APK, and the Windows host with its installer.
+## Build and check
 
-**Releasing**: bump `VERSION`, add a `## vX.Y.Z` section to `CHANGELOG.md`, and merge to `main`.
-The workflow publishes release `vX.Y.Z` with the setup program, a portable zip and the APK, and
-the in-app updaters pick it up from there. (The repository has to be public for the apps to see
-releases without signing in.)
-
-Local builds:
-
-```
-# core + tests (any OS)
-cmake -S . -B build && cmake --build build && ctest --test-dir build
-
-# Windows host (Visual Studio 2022 + an FFmpeg shared build)
-cmake -S . -B build -A x64 -DFFMPEG_DIR=C:/ffmpeg && cmake --build build --config Release
-
-# Android
-cd android && ./gradlew assembleRelease
+```powershell
+.\build.ps1 -Test
+.\build\Hyperlink.exe
 ```
 
-Release APKs are signed with a private key kept in the repository secrets
-(`HYPERLINK_KEYSTORE_BASE64`, `HYPERLINK_KEYSTORE_PASSWORD`, `HYPERLINK_KEY_ALIAS`,
-`HYPERLINK_KEY_PASSWORD`). Keep a backup of the keystore: Android only installs an update
-signed with the same key. Builds without the secrets (branches, pull requests) use a debug key.
+The build uses Windows' .NET Framework C# compiler and framework libraries. It installs no packages. `-Test` runs 12 focused integration checks for TLS pinning, unauthorized and forged identities, pairing, encrypted frames, input permissions, active revocation, expiry, malformed packets, persistence, and stopping. Tests bind to loopback, generate a synthetic screen, and do not inject input into the user's desktop.
 
-## Hardware
-
-The host picks the best encoder the PC has, in this order: NVIDIA NVENC, AMD AMF, Intel Quick
-Sync, then software x264, so swapping graphics cards needs no settings change. The phone app asks
-Android which decoders it has and uses HEVC or AV1 when both sides support it, else H.264. It
-turns on the low-latency modes of Qualcomm (Snapdragon), Samsung Exynos, MediaTek and Kirin
-decoders.
+GitHub Actions builds the portable app and runs the same checks on Windows. Release artifacts must exclude the runtime Data folder and any private invitations. The repository's earlier app remains recoverable in Git history.

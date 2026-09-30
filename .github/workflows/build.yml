@@ -1,193 +1,24 @@
-name: Build & Release
-
+name: Windows draft
 on:
   push:
-    branches: ["**"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
-
 permissions:
-  contents: write
-
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
-
+  contents: read
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.v.outputs.version }}
-      publish: ${{ steps.rel.outputs.publish }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: v
-        run: echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
-      # Publish when a v* tag is pushed, or when main carries a version with no release yet.
-      - id: rel
-        env:
-          GH_TOKEN: ${{ github.token }}
-          V: ${{ steps.v.outputs.version }}
-        run: |
-          publish=false
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            publish=true
-          elif [[ "$GITHUB_REF" == refs/heads/main && "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            if ! gh release view "v$V" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then publish=true; fi
-          fi
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "Publish v$V: $publish"
-
-  core:
-    name: Core tests (Linux)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j4
-      - run: ctest --test-dir build --output-on-failure
-
-  android:
-    name: Android app
-    needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
-      # Release builds are signed with your private key from the repository secrets.
-      - name: Signing key
-        env:
-          KEYSTORE_B64: ${{ secrets.HYPERLINK_KEYSTORE_BASE64 }}
-          PUBLISH: ${{ needs.version.outputs.publish }}
-        run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/hyperlink.jks"
-            echo "HYPERLINK_KEYSTORE=$RUNNER_TEMP/hyperlink.jks" >> "$GITHUB_ENV"
-          elif [ "$PUBLISH" = "true" ]; then
-            echo "::error::Add the HYPERLINK_KEYSTORE_BASE64 secret before publishing a release."; exit 1
-          else
-            echo "::warning::No signing secret: this test build uses a throwaway debug key."
-          fi
-      - name: Build APK
-        working-directory: android
-        env:
-          HYPERLINK_KEYSTORE_PASSWORD: ${{ secrets.HYPERLINK_KEYSTORE_PASSWORD }}
-          HYPERLINK_KEY_ALIAS: ${{ secrets.HYPERLINK_KEY_ALIAS }}
-          HYPERLINK_KEY_PASSWORD: ${{ secrets.HYPERLINK_KEY_PASSWORD }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
-      - name: Rename
-        run: |
-          mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release.apk "dist/Hyperlink-Android-${{ needs.version.outputs.version }}.apk"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: android
-          path: dist/*.apk
-
-  windows:
-    name: Windows host
-    needs: version
+  build:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-    env:
-      V: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Download FFmpeg (BtbN shared build)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          names=$(gh release view latest --repo BtbN/FFmpeg-Builds --json assets -q '.assets[].name')
-          # Newest numbered release branch (e.g. n7.1), 64-bit, GPL, shared libraries.
-          asset=$(echo "$names" | grep -E '^ffmpeg-n[0-9.]+-latest-win64-gpl-shared-[0-9.]+\.zip$' | sort -V | tail -n1)
-          echo "Using $asset"
-          gh release download latest --repo BtbN/FFmpeg-Builds --pattern "$asset" --dir "$RUNNER_TEMP"
-          7z x -y -o"$RUNNER_TEMP/ffmpeg" "$RUNNER_TEMP/$asset" >/dev/null
-          dir=$(find "$RUNNER_TEMP/ffmpeg" -maxdepth 1 -mindepth 1 -type d | head -n1)
-          echo "FFMPEG_DIR=$(cygpath -m "$dir")" >> "$GITHUB_ENV"
-
-      - name: Download WebView2 SDK
-        run: |
-          set -euo pipefail
-          curl -sSL -o "$RUNNER_TEMP/wv2.zip" https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40
-          7z x -y -o"$RUNNER_TEMP/webview2" "$RUNNER_TEMP/wv2.zip" >/dev/null
-          echo "WEBVIEW2_DIR=$(cygpath -m "$RUNNER_TEMP/webview2")" >> "$GITHUB_ENV"
-
-      - name: Configure & build
-        run: |
-          cmake -S . -B build -A x64 -DFFMPEG_DIR="$FFMPEG_DIR" -DWEBVIEW2_DIR="$WEBVIEW2_DIR"
-          cmake --build build --config Release -j 4
-
-      - name: Core tests (Windows)
-        run: ctest --test-dir build -C Release --output-on-failure
-
-      - name: Stage files
-        run: |
-          set -euo pipefail
-          mkdir -p stage
-          cp build/host/Release/HyperlinkHost.exe stage/
-          for lib in avcodec avutil swresample; do cp "$FFMPEG_DIR"/bin/$lib-*.dll stage/; done
-          cp LICENSE stage/ 2>/dev/null || true
-          ls -la stage
-
-      - name: Self-test (exe and DLLs load)
-        shell: pwsh
-        run: |
-          $out = Join-Path $env:RUNNER_TEMP 'selftest.txt'
-          $p = Start-Process -FilePath stage/HyperlinkHost.exe -ArgumentList '--selftest', $out -Wait -PassThru
-          Get-Content $out
-          if ($p.ExitCode -ne 0 -or -not (Select-String -Path $out -Pattern '^ok$' -Quiet)) { throw "self-test failed" }
-
-      - name: Portable zip
-        run: (cd stage && 7z a -tzip -mx=7 "../Hyperlink-Windows-$V-x64.zip" . >/dev/null)
-
-      - name: Installer
-        run: |
-          MSYS_NO_PATHCONV=1 "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" "/DAppVersion=$V" \
-            "/DSourceDir=$(cygpath -w "$PWD/stage")" "/DOutputDir=$(cygpath -w "$PWD")" \
-            "$(cygpath -w "$PWD/host/installer/Hyperlink.iss")"
-          ls -la *.exe
-
-      - uses: actions/upload-artifact@v4
+      - name: Build and run security checks
+        shell: powershell
+        run: ./build.ps1 -Test
+      - name: Upload portable draft
+        uses: actions/upload-artifact@v4
         with:
-          name: windows
+          name: Hyperlink-Windows-0.1.0
           path: |
-            Hyperlink-Setup-*.exe
-            Hyperlink-Windows-*.zip
-
-  release:
-    name: Publish release
-    needs: [version, core, android, windows]
-    if: needs.version.outputs.publish == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - name: Release notes from CHANGELOG.md
-        env:
-          V: ${{ needs.version.outputs.version }}
-        run: |
-          awk -v v="$V" '/^## / { if (found) exit; if (index($0, "v" v) > 0) { found=1; next } } found { print }' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "Hyperlink $V" > notes.md
-          cat notes.md
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.version.outputs.version }}
-          target_commitish: ${{ github.sha }}
-          name: Hyperlink ${{ needs.version.outputs.version }}
-          body_path: notes.md
-          files: dist/*
-          fail_on_unmatched_files: true
+            build/Hyperlink.exe
+            build/README.md
+            build/self-test.txt
+            build/docs/ROADMAP.md

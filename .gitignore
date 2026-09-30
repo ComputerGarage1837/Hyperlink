@@ -1,13 +1,5 @@
-build/
-out/
-stage/
-dist/
+/build/
+/Data/
+/outputs/
+*.pdb
 *.user
-.vs/
-android/.gradle/
-android/local.properties
-android/app/build/
-android/app/.cxx/
-android/build/
-.idea/
-*.iml
