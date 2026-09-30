@@ -1,0 +1,116 @@
+diff --git a/src/client.rs b/src/client.rs
+index dcd5941..56b1267 100644
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -763,76 +763,43 @@ impl Client {
+         key: &str,
+         conn: &mut Stream,
+     ) -> ResultType<Option<Vec<u8>>> {
+-        let rs_pk = get_rs_pk(if key.is_empty() {
+-            config::RS_PUB_KEY
+-        } else {
+-            key
+-        });
+-        let mut sign_pk = None;
+-        let mut option_pk = None;
+-        if !signed_id_pk.is_empty() {
+-            if let Some(rs_pk) = rs_pk {
+-                if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk) {
+-                    if id == peer_id {
+-                        sign_pk = Some(sign::PublicKey(pk));
+-                        option_pk = Some(pk.to_vec());
+-                    }
+-                }
+-            }
+-            if sign_pk.is_none() {
+-                log::error!("Handshake failed: invalid public key from rendezvous server");
+-            }
++        // Hyperlink never falls back to a public rendezvous key or plaintext.
++        if key.is_empty() {
++            bail!("Private rendezvous identity key is required");
+         }
+-        let sign_pk = match sign_pk {
+-            Some(v) => v,
+-            None => {
+-                // send an empty message out in case server is setting up secure and waiting for first message
+-                conn.send(&Message::new()).await?;
+-                return Ok(option_pk);
+-            }
++        let rs_pk = match get_rs_pk(key) {
++            Some(pk) => pk,
++            None => bail!("Invalid private rendezvous identity key"),
+         };
+-        match timeout(READ_TIMEOUT, conn.next()).await? {
+-            Some(res) => {
+-                let bytes = res?;
+-                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+-                    if let Some(message::Union::SignedId(si)) = msg_in.union {
+-                        if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
+-                            if id == peer_id {
+-                                let (asymmetric_value, symmetric_value, key) =
+-                                    create_symmetric_key_msg(their_pk_b);
+-                                let mut msg_out = Message::new();
+-                                msg_out.set_public_key(PublicKey {
+-                                    asymmetric_value,
+-                                    symmetric_value,
+-                                    ..Default::default()
+-                                });
+-                                timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
+-                                conn.set_key(key);
+-                            } else {
+-                                log::error!("Handshake failed: sign failure");
+-                                conn.send(&Message::new()).await?;
+-                            }
+-                        } else {
+-                            // fall back to non-secure connection in case pk mismatch
+-                            log::info!("pk mismatch, fall back to non-secure");
+-                            let mut msg_out = Message::new();
+-                            msg_out.set_public_key(PublicKey::new());
+-                            conn.send(&msg_out).await?;
+-                        }
+-                    } else {
+-                        log::error!("Handshake failed: invalid message type");
+-                        conn.send(&Message::new()).await?;
+-                    }
+-                } else {
+-                    log::error!("Handshake failed: invalid message format");
+-                    conn.send(&Message::new()).await?;
+-                }
+-            }
+-            None => {
+-                bail!("Reset by the peer");
+-            }
+-        }
+-        Ok(option_pk)
++        let (signed_peer_id, peer_sign_pk) = decode_id_pk(&signed_id_pk, &rs_pk)?;
++        if signed_peer_id != peer_id {
++            bail!("Authenticated peer identity mismatch");
++        }
++        let sign_pk = sign::PublicKey(peer_sign_pk);
++        let bytes = match timeout(READ_TIMEOUT, conn.next()).await? {
++            Some(result) => result?,
++            None => bail!("Reset by the peer"),
++        };
++        let message = Message::parse_from_bytes(&bytes)?;
++        let signed = match message.union {
++            Some(message::Union::SignedId(value)) => value,
++            _ => bail!("Authenticated handshake message required"),
++        };
++        let (handshake_peer_id, peer_box_pk) = decode_id_pk(&signed.id, &sign_pk)?;
++        if handshake_peer_id != peer_id {
++            bail!("Authenticated handshake identity mismatch");
++        }
++        let (asymmetric_value, symmetric_value, session_key) =
++            create_symmetric_key_msg(peer_box_pk);
++        let mut message = Message::new();
++        message.set_public_key(PublicKey {
++            asymmetric_value,
++            symmetric_value,
++            ..Default::default()
++        });
++        timeout(CONNECT_TIMEOUT, conn.send(&message)).await??;
++        conn.set_key(session_key);
++        Ok(Some(peer_sign_pk.to_vec()))
+     }
+ 
+     /// Request a relay connection to the server.

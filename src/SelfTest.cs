@@ -174,7 +174,16 @@ namespace Hyperlink
                         Pass("Stopping hosting closes admission and clears held input.");
                     }
                 }
-                results.Add("12 checks passed. Network tests use loopback and a synthetic screen; no desktop input is injected.");
+                using (var enrolled = new Store(Path.Combine(root, "family-enrolled")))
+                using (var guarded = new Host(enrolled, delegate(string name, bool pair) { return 2; }, delegate { }, true))
+                {
+                    enrolled.Data.FamilyDeviceId = "test-enrolled-device";
+                    bool denied = false;
+                    try { guarded.Start(IPAddress.Loopback, 0); } catch (InvalidOperationException) { denied = true; }
+                    Check(denied, "Family-enrolled host must reject legacy admission.");
+                    Pass("Family-enrolled host rejects legacy direct pairing.");
+                }
+                results.Add("13 checks passed. Network tests use loopback and a synthetic screen; no desktop input is injected.");
             }
             catch (Exception ex) { exit = 1; results.Add("FAIL  " + ex.ToString()); if (testedHost != null && testedHost.LastFailure != null) results.Add("HOST  " + testedHost.LastFailure.ToString()); }
             finally

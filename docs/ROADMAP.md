@@ -1,37 +1,51 @@
-# Hyperlink: blueprint milestones
+# Hyperlink implementation gates
 
-The target is a private, invite-only remote desktop for family use, beginning with Windows computers and an Android viewer. Smoothness takes priority; automatic mode eventually selects genuine 120 fps on eligible end-to-end paths and 60 fps otherwise. Requested encoder/capture rates are not evidence of presented performance.
+Requirements come from the owner's Private Family Remote Desktop Blueprint. The owner chose existing hosting and `hyperlink.myfamilyapps.ca`, and waived Windows code signing for personal use. Other security requirements remain applicable.
 
-## First draft: delivered foundations
+## Implemented development slices
 
-The 0.1 draft demonstrates a real attended Windows connection, encrypted direct transport, certificate pinning, viewer identity proofs, per-device grants, local approval, view-only enforcement, live screen rendering, control, local stop, revocation, and persistent protected identities. It intentionally provides a truthful, lower-performance prototype while the final native engine is evaluated. Its device grants are not family accounts.
+- Attended Windows screen/input prototype with TLS pinning, durable key proof, expiring invitation, local consent, view-only admission, revocation, input release and stop.
+- PHP 8.4 account/device API with MFA, recovery, explicit viewer trust, DPoP, rotating refresh, owner-only granular grants, signed one-use tickets, thirty-second leases and independent revocation.
+- Native account UI and Windows/PHP RSA proof interoperability.
+- Legacy admission disabled after family host enrollment.
+- Tested SQLite persistence, private keys/configuration outside web root, restore invalidation and thirty-day audit cleanup.
 
-## Gate 1: security and performance engine decision
+## Foundation gate — open
 
-Audit a pinned RustDesk revision as the blueprint's first candidate. Reject insecure-continuation paths for direct, relayed, input, and auxiliary channels; verify authorization against modified clients. Compare alternative native engines if the audit or measured 120 fps gate fails. The standalone JPEG prototype can validate workflows but cannot satisfy this gate.
+Pinned RustDesk evaluation: 1.4.9, commit `6c578292e8ebbbec708b76986ba8c4bc7c509747`. An initial audit found a client path returning success without an authenticated peer key. Patch and audit all alternate routes before adoption. Preserve licenses and publish required source.
 
-Measure requested, captured, encoded, decoded, and distinct presented frames, frame intervals, input latency, and sustained behavior on qualifying hardware, monitors, codecs, and networks. Record explicit pass/fail and 60 fps fallback evidence. Never use duplicated frames or a setting labeled 120 as proof.
+Enforce family tickets and independent local owner policy inside engine admission. Bind both endpoint keys, prevent replay, and reject invalid keys or expired/revoked leases. Raw IDs, direct IP, LAN discovery, saved passwords, public rendezvous fallback and compatibility clients cannot provide alternative authorization. UI wrapping is insufficient.
 
-## Gate 2: identity and private control service
+## Genuine 120 fps gate — open
 
-Implement invite-only user accounts with strong authentication, MFA and recovery. Bind devices to owners through explicit enrollment and persistent device keys. Own and explicitly shared devices are the only devices an account may enumerate or connect to. Provide named, scoped, expiring grants and immediately effective revocation on new and existing sessions. Administrators and routing IDs cannot override owner authorization.
+Replace JPEG with hardware accelerated capture, encoding, decoding and presentation. Begin with one SDR 1080p display and H.264. Count distinct moving frame identifiers through presentation.
 
-Separate control API, identity, rendezvous, opaque encrypted relay, native media, and permission-checked input/data channels. Use short-lived, key-bound session authorizations. Fail closed during account/service failure and reconnect. Store metadata-only audit events with redacted diagnostics; never log screen contents, keystrokes, or clipboard data.
+Blueprint reference goals: thirty minutes averaging >=118 distinct presented fps, 1% low >=110 fps, changing-frame drops/repeats <1%. Wired LAN input-to-visible goals: median <=50 ms, p95 <=80 ms. Android also needs sixty-minute endurance. These remain unproved targets.
 
-## Gate 3: trusted Windows core (blueprint R01–R14)
+Adapt readable quality/resolution/bitrate first, then genuine 60 fps if necessary. Label emergency 30 fps or lower. Report actual stage limits and frame age. Qualify forced relay and real internet independently.
 
-Finish and validate a signed Windows service plus visible per-user helper, unattended restart/pre-login behavior within supported Windows limits, physical-console capture/input, UAC/secure-desktop/lock/sign-out behavior through supported service mechanisms, local session visibility and emergency stop, invalid-package rejection, signed update rollback, and safe held-input recovery. Do not weaken Windows security. Complete hostile-client authorization, reconnect, transport downgrade, update interruption, grant revocation, and fault tests before trusted family use.
+## Secure hosted connection gate — open
 
-## Gate 4: complete everyday release (R15–R23)
+Deploy after the owner reports the domain ready. Verify live HTTPS, account isolation, proofs, private database permissions and restore behavior. MariaDB is optional and needs a live test before use.
 
-Ship Android viewing with hardware decode, touchpad and direct-touch input, zoom, keyboard/modifiers, and the same account/grant rules. Complete multi-monitor/mixed-DPI/rotation/hot-plug coordinates, separately permitted clipboard directions, safe files/folders with progress and cancellation, optional encrypted system audio, bounded reconnect, direct/relay status, automatic 120/60 and visible emergency lower rates, validated headless display support, redacted diagnostics, and maintenance tools.
+Integrate the engine with the host's independently maintained owner-approved allowlist. Redeem tickets once, renew every five seconds, measure online revoke within ten seconds, and stop by thirty-second lease expiry during policy outage. Host enforcement remains unfinished.
 
-## Gate 5: explicitly decided options (R24–R30)
+Verify support for native rendezvous and opaque relay on hosting. PHP capability does not establish permission or reachability for TCP/UDP daemons. Preserve end-to-end encryption against a hostile relay.
 
-Keep remote printing, validated Wake-on-LAN, privacy mode with emergency recovery, explicitly consented visible encrypted recording, transfer resume, portable attended support, iOS, Windows ARM64, HDR, AV1 and advanced simultaneous displays on the decision list. Include or defer each with a stated reason; do not silently drop them. None enters the first trusted pilot accidentally.
+## Installed Windows lifecycle gate — open
 
-## Current compatibility and release evidence
+Implement a narrow privileged service and ordinary helper with authenticated local IPC. Test Windows 11 x64 login, lock, UAC, sign-out, user switching, reboot, sleep and emergency stop. Never disable UAC, save a Windows password or hide access. Unattended enrollment needs explicit owner permission and trusted viewers.
 
-Baseline: Windows 11 x64 with .NET Framework 4.8, ordinary unlocked desktop, one approved viewer per host, direct LAN/private VPN. Windows 10, Windows ARM64, Android and iOS are not validated by this draft. The app is unsigned and requires an open host window. No public signup, billing, marketplace, hidden recording, remote shell, or stealth access is planned.
+## Everyday family use gate — open
 
-Local automated tests and a visual launch are draft evidence. Cross-machine Windows control, monitor/DPI combinations, real network faults, accessibility, phone use, signed packages, service behavior, adversarial security review, and hardware performance remain release gates. An EXE compiling successfully is not evidence that those gates passed.
+Build native Android viewing with OS-protected keys, gestures, modifiers, rotation/cutouts and honest sustained frame reporting. Android needs a stable APK signing identity, separate from purchased Windows code signing.
+
+Add monitor switching/mixed DPI, directional text clipboard rights, safe bounded file transfer, authorized system audio, bounded reconnect and redacted diagnostics. Deny unauthorized use independently on every channel.
+
+## Delivery and operations gate — open
+
+Implement authenticated versioned update manifests, an offline release key separate from the account server, integrity checks, interruption recovery and security rollback policy. Windows executables remain unsigned by the owner's choice.
+
+Run hostile-client/key/relay tests, fault injection, network/display matrix, twenty-four-hour host endurance, restore drill and family pilot. Attach evidence to a build/configuration. CI does not replace hardware, lifecycle or security review.
+
+P2 choices remain explicit: printing, Wake-on-LAN, privacy mode, recording, advanced resume, portable host, iOS, ARM64, HDR and AV1. Headless mode needs a tested display source and a separate driver/hardware maintenance decision.

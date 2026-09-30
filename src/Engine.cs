@@ -35,6 +35,8 @@ namespace Hyperlink
     {
         public string Name = Environment.MachineName;
         public string PrivateKey, Certificate;
+        public string AccountRefresh;
+        public string FamilyDeviceId;
         public int Port = 45831;
         public List<Peer> Peers = new List<Peer>();
         public List<Device> Devices = new List<Device>();
@@ -378,6 +380,7 @@ namespace Hyperlink
         { store = state; approve = confirmation; status = changed; synthetic = simulate; Input = new InputController(simulate); }
         public void Start(IPAddress bind, int port)
         {
+            lock (store.Sync) if (!String.IsNullOrEmpty(store.Data.FamilyDeviceId)) throw new InvalidOperationException("This computer uses family authorization. Hosted connections are still being integrated; direct pairing is disabled.");
             lock (gate)
             {
                 if (listener != null) return;

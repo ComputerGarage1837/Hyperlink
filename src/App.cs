@@ -238,6 +238,7 @@ namespace Hyperlink
     {
         readonly Store store;
         readonly Host host;
+        readonly AccountClient account;
         readonly Panel content;
         readonly Label eventLabel;
         readonly Dictionary<string, Button> navigation = new Dictionary<string, Button>();
@@ -247,17 +248,17 @@ namespace Hyperlink
         readonly System.Windows.Forms.Timer refresh;
         public MainWindow(Store state)
         {
-            store = state; Text = "Hyperlink · Private remote desktop"; Size = new Size(1240, 830); MinimumSize = new Size(1100, 760);
+            store = state; account = new AccountClient(store.Key, "https://hyperlink.myfamilyapps.ca"); Text = "Hyperlink · Private remote desktop"; Size = new Size(1240, 830); MinimumSize = new Size(1100, 760);
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             StartPosition = FormStartPosition.CenterScreen; BackColor = Theme.Background; ForeColor = Theme.Text; Font = Theme.Font(10); AutoScaleMode = AutoScaleMode.Dpi;
             host = new Host(store, Approve, Changed);
             var sidebar = new Panel { Dock = DockStyle.Left, Width = 270, BackColor = Theme.Sidebar, Padding = new Padding(16, 4, 16, 18) };
             var nav = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(0, 25, 0, 0) };
-            foreach (string name in new[] { "Computers", "This computer", "Access", "About this draft" })
+            foreach (string name in new[] { "Computers", "This computer", "Access", "Family account", "About this draft" })
             { string target = name; var b = Theme.Button(name); b.Width = 238; b.Height = 48; b.TextAlign = ContentAlignment.MiddleLeft; b.Padding = new Padding(12, 0, 0, 0); b.Margin = new Padding(0, 0, 0, 10); b.Click += delegate { page = target; Render(); }; navigation.Add(name, b); nav.Controls.Add(b); }
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
             var identity = Theme.Label("LOCAL IDENTITY\n" + store.Data.Name + "\n\nWindows-protected\nlocal identity", 9, Theme.Muted); identity.Dock = DockStyle.Fill; bottom.Controls.Add(identity);
-            var version = Theme.Label("v0.1.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
+            var version = Theme.Label("v0.2.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
             sidebar.Controls.Add(nav); sidebar.Controls.Add(bottom); sidebar.Controls.Add(new Brand());
             var shell = new Panel { Dock = DockStyle.Fill, Padding = new Padding(30, 22, 30, 18) };
             content = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -303,7 +304,7 @@ namespace Hyperlink
         {
             content.SuspendLayout(); foreach (Control c in content.Controls.Cast<Control>().ToArray()) c.Dispose(); content.Controls.Clear(); hostState = null;
             foreach (var n in navigation) { n.Value.BackColor = n.Key == page ? Color.FromArgb(30, 62, 61) : Theme.Sidebar; n.Value.ForeColor = n.Key == page ? Theme.Accent : Theme.Muted; n.Value.FlatAppearance.BorderSize = 0; }
-            if (page == "Computers") Computers(); else if (page == "This computer") ThisComputer(); else if (page == "Access") Access(); else About();
+            if (page == "Computers") Computers(); else if (page == "This computer") ThisComputer(); else if (page == "Access") Access(); else if (page == "Family account") content.Controls.Add(new AccountPanel(store, account, host)); else About();
             content.ResumeLayout(true);
         }
         internal void SelectPage(string name) { if (!navigation.ContainsKey(name)) throw new ArgumentException("Unknown page."); page = name; Render(); }
@@ -414,7 +415,7 @@ namespace Hyperlink
         }
         void About()
         {
-            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.1.0\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nNo invite-only account server or synchronized family device lists yet\r\nAndroid, unattended service, UAC / lock-screen control and signed updates remain planned\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; card.Controls.Add(text); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
+            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.2.0\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nNo invite-only account server or synchronized family device lists yet\r\nAndroid, unattended service, UAC / lock-screen control and signed updates remain planned\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; card.Controls.Add(text); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
         }
     }
 

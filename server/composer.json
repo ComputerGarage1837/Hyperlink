@@ -1,0 +1,14 @@
+{
+  "name": "hyperlink/family-controller",
+  "description": "Private Hyperlink family account and authorization service",
+  "type": "project",
+  "require": {
+    "php": ">=8.4",
+    "ext-pdo": "*",
+    "ext-openssl": "*",
+    "ext-mbstring": "*",
+    "firebase/php-jwt": "^7.0",
+    "spomky-labs/otphp": "^11.5"
+  },
+  "config": { "sort-packages": true }
+}

@@ -3,3 +3,6 @@
 /outputs/
 *.pdb
 *.user
+/server/vendor/
+/server/private/
+/server/.env
