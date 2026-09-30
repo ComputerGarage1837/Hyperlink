@@ -1,6 +1,8 @@
 # Hyperlink
 
-Private family remote desktop for Windows and Android. Current version: **0.2.0 development draft**. The owner authorized replacing the original prototype.
+Private family remote desktop for Windows and Android. Current version: **0.3.0 development draft**. The owner authorized replacing the original prototype.
+
+0.3 adds a native Android attended viewer and Unicode keyboard input on Windows. The APK builds and its personal signature verifies. The shipped Java TLS/RSA implementation passes synthetic Windows host interoperability checks, including rejection of a wrong certificate pin and malicious read-only text input. Android-generated DPoP proofs pass the PHP controller's checks. Android launch, Keystore persistence, gestures and rotation remain unverified: the local software emulator has not booted. See [Android build and test instructions](android/README.md).
 
 ## Windows draft
 

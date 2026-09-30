@@ -101,6 +101,16 @@ namespace Hyperlink
             Host testedHost = null;
             try
             {
+                var textInput = new InputController(true);
+                textInput.Apply(new Dictionary<string, object> { { "type", "text" }, { "text", "Family \u00e9 \ud83d\ude00" } }, null);
+                Check(textInput.Applied == 1 && textInput.Held == 0, "Unicode input did not complete safely.");
+                foreach (string invalid in new[] { "", new string('x', 1025), "a\0b", "\ud800", "\udc00" })
+                {
+                    bool denied = false;
+                    try { textInput.Apply(new Dictionary<string, object> { { "type", "text" }, { "text", invalid } }, null); }
+                    catch { denied = true; }
+                    Check(denied && textInput.Held == 0, "Malformed text input was accepted.");
+                }
                 using (var hostStore = new Store(Path.Combine(root, "host")))
                 using (var viewer = new Store(Path.Combine(root, "viewer")))
                 using (var readOnly = new Store(Path.Combine(root, "readonly")))

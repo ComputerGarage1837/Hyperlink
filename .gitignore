@@ -6,3 +6,7 @@
 /server/vendor/
 /server/private/
 /server/.env
+/android/build/
+*.p12
+*.jks
+*.keystore

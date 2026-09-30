@@ -291,6 +291,20 @@ namespace Hyperlink
                     if (x < 0 || y < 0 || x >= capture.Width || y >= capture.Height) throw new InvalidDataException("Pointer outside display.");
                     Point p = capture.PointFor(x, y); if (!synthetic) Move(p);
                 }
+                else if (type == "text")
+                {
+                    string text = Wire.Text(message, "text");
+                    if (text.Length < 1 || text.Length > 1024 || text.IndexOf('\0') >= 0) throw new InvalidDataException("Invalid text input.");
+                    for (int i = 0; i < text.Length; i++)
+                    {
+                        if (Char.IsHighSurrogate(text[i]))
+                        {
+                            if (i + 1 >= text.Length || !Char.IsLowSurrogate(text[++i])) throw new InvalidDataException("Invalid Unicode text.");
+                        }
+                        else if (Char.IsLowSurrogate(text[i])) throw new InvalidDataException("Invalid Unicode text.");
+                    }
+                    if (!synthetic) SendText(text);
+                }
                 else if (type == "key")
                 {
                     int key = Wire.Number(message, "key"), down = Wire.Number(message, "down");
@@ -326,6 +340,20 @@ namespace Hyperlink
         {
             var desktop = SystemInformation.VirtualScreen;
             SendMouse(0x8000 | 0x4000 | 1, 0, (p.X - desktop.Left) * 65535 / Math.Max(1, desktop.Width - 1), (p.Y - desktop.Top) * 65535 / Math.Max(1, desktop.Height - 1));
+        }
+        static void SendText(string text)
+        {
+            foreach (char value in text)
+            {
+                var down = new INPUT { type = 1 };
+                down.union.keyboard.wScan = (ushort)value; down.union.keyboard.dwFlags = 4;
+                var up = down; up.union.keyboard.dwFlags = 6;
+                if (SendInput(2, new[] { down, up }, Marshal.SizeOf(typeof(INPUT))) != 2)
+                {
+                    SendInput(1, new[] { up }, Marshal.SizeOf(typeof(INPUT)));
+                    throw new InvalidOperationException("Windows did not accept text input.");
+                }
+            }
         }
         static void SendKey(int key, bool down)
         {
@@ -474,7 +502,7 @@ namespace Hyperlink
                     active = wire; activePeer = id; ownsSession = true;
                 }
                 var capture = new Capture(Monitor, synthetic);
-                wire.SendJson(new { kind = "accepted", control = control, width = capture.Width, height = capture.Height, requestedFps = 30, name = store.Data.Name });
+                wire.SendJson(new { kind = "accepted", control = control, textInput = true, width = capture.Width, height = capture.Height, requestedFps = 30, name = store.Data.Name });
                 status(name + " is connected · " + (control ? "View and control" : "View only"));
                 wire.Stream.ReadTimeout = 10000;
                 var sessionWire = wire;

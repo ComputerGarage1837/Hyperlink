@@ -1,0 +1,16 @@
+name: Android wire interoperability
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  wire:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Android signing and synthetic Windows host tests
+        shell: pwsh
+        run: |
+          if (-not $env:JAVA_HOME_21_X64) { throw 'JDK 21 is required' }
+          ./android/test.ps1 -Jdk $env:JAVA_HOME_21_X64 -Output "$env:RUNNER_TEMP/hyperlink-interop"
