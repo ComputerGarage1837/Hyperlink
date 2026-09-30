@@ -115,7 +115,7 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
             else if(action==MotionEvent.ACTION_POINTER_DOWN){multiple=true;lastScrollY=y;if(dragging){remote.input("type","button","button",0,"down",0);dragging=false;}}
             else if(action==MotionEvent.ACTION_MOVE){
                 if(event.getPointerCount()>1){float delta=y-lastScrollY;if(Math.abs(delta)>12&&!scale.isInProgress()){remote.input("type","wheel","delta",delta>0?120:-120);lastScrollY=y;}}
-                else if(!multiple){if(!dragging&&event.getEventTime()-downAt>450){remote.input("type","button","button",0,"down",1);dragging=true;}
+                else if(!multiple){if(!dragging&&event.getEventTime()-downAt>450&&Math.hypot(x-downX,y-downY)<20){remote.input("type","button","button",0,"down",1);dragging=true;}
                     float r=ratio();if(direct)move((x-(getWidth()-frameWidth*r)/2)/r,(y-(getHeight()-frameHeight*r)/2)/r);else move(pointerX+(x-lastX)/r,pointerY+(y-lastY)/r);}
             } else if(action==MotionEvent.ACTION_UP){if(dragging)remote.input("type","button","button",0,"down",0);
                 else if(!multiple&&Math.hypot(x-downX,y-downY)<20)remote.click(0);dragging=false;}

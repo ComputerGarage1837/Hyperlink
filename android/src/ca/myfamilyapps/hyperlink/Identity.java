@@ -39,7 +39,7 @@ final class Identity {
         return (SecretKey)keys.getKey(AES, null);
     }
     synchronized void remember(String refresh) throws GeneralSecurityException, java.io.IOException {
-        if (refresh == null) { context.getSharedPreferences("login", 0).edit().clear().commit(); return; }
+        if (refresh == null) { if (!context.getSharedPreferences("login", 0).edit().clear().commit()) throw new java.io.IOException("Cannot clear saved login"); return; }
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding"); cipher.init(Cipher.ENCRYPT_MODE, loginKey());
         cipher.updateAAD((Api.ORIGIN+"|"+jkt).getBytes(StandardCharsets.UTF_8));
         byte[] encrypted = cipher.doFinal(refresh.getBytes(StandardCharsets.UTF_8));
