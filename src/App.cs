@@ -207,7 +207,7 @@ namespace Hyperlink
         internal string ConnectionState { get { return state.Text; } }
         public Viewer(Store store, Device device)
         {
-            Text = device.Name + " · Hyperlink"; Size = new Size(1080, 760); MinimumSize = new Size(700, 480); StartPosition = FormStartPosition.CenterScreen;
+            Text = device.Name + " · Hyperlink"; Size = new Size(1080, 760); MinimumSize = new Size(980, 600); StartPosition = FormStartPosition.CenterScreen;
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             BackColor = Theme.Background; ForeColor = Theme.Text;
             var bar = new TableLayoutPanel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(16), BackColor = Theme.Sidebar, ColumnCount = 4, RowCount = 1 };
@@ -432,16 +432,27 @@ namespace Hyperlink
                 if (args.Length == 3 && args[0] == "--viewer-smoke") return SelfTest.ViewerCheck(args[1], args[2]);
                 string data = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
                 if (args.Length == 2 && args[0] == "--data") data = args[1];
-                using (var store = new Store(data)) using (var main = new MainWindow(store))
+                string mutexName = "Local\\Hyperlink-" + Util.Hash(Path.GetFullPath(data).ToUpperInvariant() + System.Security.Principal.WindowsIdentity.GetCurrent().User.Value);
+                using (var instance = new Mutex(false, mutexName))
                 {
-                    if (args.Length >= 2 && args[0] == "--smoke-ui")
+                    bool acquired;
+                    try { acquired = instance.WaitOne(0); } catch (AbandonedMutexException) { acquired = true; }
+                    if (!acquired) { MessageBox.Show("Hyperlink is already open for this data folder.", "Hyperlink", MessageBoxButtons.OK, MessageBoxIcon.Information); return 0; }
+                    try
                     {
-                        if (args.Length == 3) main.SelectPage(args[2]);
-                        var timer = new System.Windows.Forms.Timer { Interval = 1200 };
-                        timer.Tick += delegate { timer.Stop(); using (var b = new Bitmap(main.Width, main.Height)) { main.DrawToBitmap(b, new Rectangle(Point.Empty, main.Size)); b.Save(args[1], System.Drawing.Imaging.ImageFormat.Png); } main.Close(); timer.Dispose(); };
-                        main.Shown += delegate { timer.Start(); };
+                        using (var store = new Store(data)) using (var main = new MainWindow(store))
+                        {
+                            if (args.Length >= 2 && args[0] == "--smoke-ui")
+                            {
+                                if (args.Length == 3) main.SelectPage(args[2]);
+                                var timer = new System.Windows.Forms.Timer { Interval = 1200 };
+                                timer.Tick += delegate { timer.Stop(); using (var b = new Bitmap(main.Width, main.Height)) { main.DrawToBitmap(b, new Rectangle(Point.Empty, main.Size)); b.Save(args[1], System.Drawing.Imaging.ImageFormat.Png); } main.Close(); timer.Dispose(); };
+                                main.Shown += delegate { timer.Start(); };
+                            }
+                            Application.Run(main);
+                        }
                     }
-                    Application.Run(main);
+                    finally { instance.ReleaseMutex(); }
                 }
                 return 0;
             }
