@@ -237,6 +237,8 @@ namespace Hyperlink
 
     sealed class MainWindow : Form
     {
+        internal bool CanInstallAutomatically { get { return Application.OpenForms.Count == 1 && !host.SessionActive; } }
+        internal bool InstallAutomatically(string job) { if (!CanInstallAutomatically || !host.BeginAutomaticUpdate(delegate { UpdateCoordinator.Start(job); })) return false; Close(); return true; }
         readonly Store store;
         readonly Host host;
         readonly AccountClient account;
@@ -259,7 +261,7 @@ namespace Hyperlink
             { string target = name; var b = Theme.Button(name); b.Width = 238; b.Height = 48; b.TextAlign = ContentAlignment.MiddleLeft; b.Padding = new Padding(12, 0, 0, 0); b.Margin = new Padding(0, 0, 0, 10); b.Click += delegate { page = target; Render(); }; navigation.Add(name, b); nav.Controls.Add(b); }
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
             var identity = Theme.Label("LOCAL IDENTITY\n" + store.Data.Name + "\n\nWindows-protected\nlocal identity", 9, Theme.Muted); identity.Dock = DockStyle.Fill; bottom.Controls.Add(identity);
-            var version = Theme.Label("v0.4.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
+            var version = Theme.Label("v0.5.1   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
             sidebar.Controls.Add(nav); sidebar.Controls.Add(bottom); sidebar.Controls.Add(new Brand());
             var shell = new Panel { Dock = DockStyle.Fill, Padding = new Padding(30, 22, 30, 18) };
             content = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -425,7 +427,7 @@ namespace Hyperlink
         }
         void About()
         {
-            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.4.0\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nInvite-only account controller tested; public domain deployment pending\r\nAndroid APK built; on-device launch unverified\r\nUnattended service, UAC / lock-screen control and authenticated updates remain unfinished\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; card.Controls.Add(text); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
+            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.5.1\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\nOwner-authorized files, text clipboard and system audio\r\nSigned update packages, restart checks and recovery backups\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nInvite-only account controller tested; public domain deployment pending\r\nAndroid APK built; on-device launch unverified\r\nUnattended service, UAC / lock-screen control and authenticated updates remain unfinished\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; var updateLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; updateLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); updateLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56)); var updateButton = Theme.Button("Install verified local update", true); updateButton.Dock = DockStyle.Fill; updateButton.Click += delegate { using (var window = new UpdateWindow(this, store)) window.ShowDialog(this); }; updateLayout.Controls.Add(text, 0, 0); updateLayout.Controls.Add(updateButton, 0, 1); card.Controls.Add(updateLayout); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
         }
     }
 
@@ -438,6 +440,10 @@ namespace Hyperlink
             {
                 try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch (EntryPointNotFoundException) { }
                 if (args.Length > 0 && args[0] == "--self-test") return SelfTest.Run(args.Length > 1 ? args[1] : null);
+                if (args.Length == 3 && args[0] == "--verify-update") { ReleasePackages.Stage(args[1], args[2], UpdateCoordinator.Floor); return 0; }
+                if (args.Length == 2 && args[0] == "--install-local-update") { string update = UpdateCoordinator.Prepare(args[1]); UpdateCoordinator.Start(update); return 0; }
+                if (args.Length == 0 || (args.Length > 0 && args[0].StartsWith("--update-", StringComparison.Ordinal)))
+                { int? updateResult = UpdateCoordinator.Startup(args); if (updateResult.HasValue) return updateResult.Value; }
                 if (args.Length == 3 && args[0] == "--screen-test") return SelfTest.ScreenCheck(args[1], args[2]);
                 Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
                 if (args.Length == 3 && args[0] == "--viewer-smoke") return SelfTest.ViewerCheck(args[1], args[2]);
@@ -453,6 +459,8 @@ namespace Hyperlink
                     {
                         using (var store = new Store(data)) using (var main = new MainWindow(store))
                         {
+                            main.Shown += delegate { UpdateCoordinator.MarkHealthy(); };
+                            UpdateFeed.Attach(main, store);
                             if (args.Length >= 2 && args[0] == "--smoke-ui")
                             {
                                 if (args.Length == 3) main.SelectPage(args[2]);
@@ -467,7 +475,12 @@ namespace Hyperlink
                 }
                 return 0;
             }
-            catch (Exception ex) { MessageBox.Show(ex.Message, "Hyperlink couldn't start", MessageBoxButtons.OK, MessageBoxIcon.Error); return 1; }
+            catch (Exception ex)
+            {
+                if (args.Length > 0 && new[] { "--smoke-ui", "--verify-update", "--install-local-update" }.Contains(args[0])) Console.Error.WriteLine(ex.ToString());
+                else MessageBox.Show(ex.Message, "Hyperlink couldn't start", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 1;
+            }
         }
     }
 }

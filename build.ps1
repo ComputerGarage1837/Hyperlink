@@ -7,7 +7,7 @@ $exe = Join-Path ([IO.Path]::GetFullPath($Output)) 'Hyperlink.exe'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Select-Object -ExpandProperty FullName)
 . "$PSScriptRoot/scripts/AudioDependencies.ps1"
 $audioReferences = @(Get-HyperlinkAudioReferences)
-& $compiler /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /out:$exe /win32icon:"$PSScriptRoot/assets/hyperlink.ico" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Security.dll /reference:System.Web.Extensions.dll @audioReferences $sources
+& $compiler /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /out:$exe /win32icon:"$PSScriptRoot/assets/hyperlink.ico" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Security.dll /reference:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll @audioReferences $sources
 if ($LASTEXITCODE -ne 0) { throw 'Compilation failed.' }
 Copy-HyperlinkAudioRuntime ([IO.Path]::GetDirectoryName($exe))
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $Output

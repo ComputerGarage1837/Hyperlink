@@ -18,7 +18,7 @@ Copy-HyperlinkAudioRuntime $root
 $native=@(Get-ChildItem "$PSScriptRoot/../src" -Filter *.cs | ForEach-Object {$_.FullName})
 $native+=(Resolve-Path -LiteralPath "$PSScriptRoot/tests/InteropHost.cs").Path
 $fixture=Join-Path $root 'InteropHost.exe'
-& "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo /target:exe /main:Hyperlink.InteropHost "/out:$fixture" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll @audioReferences @native
+& "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo /target:exe /main:Hyperlink.InteropHost "/out:$fixture" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll @audioReferences @native
 if($LASTEXITCODE -ne 0){throw 'Windows interoperability fixture did not compile'}
 $hostProcess=Start-Process -FilePath $fixture -ArgumentList ('"'+$root+'"') -WindowStyle Hidden -PassThru
 try{
