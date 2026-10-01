@@ -41,3 +41,12 @@ About this draft opens the verified update screen. Local .hup packages use a sep
 Optional daily update checks and installation when no session is active are available, both off by default. HTTPS delivery uses the operating system's certificate checks and rejects redirects; release authenticity uses the independent offline key. Public release-feed deployment and live delivery testing remain pending. Local installation/restart, failed-startup rollback, tampering, downgrade refusal, and identity preservation have been tested. The latest controller package remains unchanged.
 
 Hardware H.264 encoding and GPU capture were probed successfully on generated data and a discarded frame. Live H.264 transport, true 120 FPS qualification, unattended service/UAC handling, printing, privacy mode, recording, Wake-on-LAN, and real Android device validation remain unfinished. The shipped live stream is still the 30 FPS JPEG draft.
+
+### Local wake requests (0.5.2)
+Windows and Android can send validated Wake-on-LAN packets through a selected local IPv4 broadcast network. The target must already support and enable Wake-on-LAN. Delivery does not prove wake-up; waking over the internet is not implemented.
+
+The optional -Video build and --video-self-test command are experimental codec diagnostics. They are not connected to live remote sessions. The synthetic 1080p decode test achieved about 58 FPS, so 120 FPS remains unqualified. Default builds use the existing JPEG session path.
+
+
+### Windows session recording (0.5.3)
+The owner can grant recording independently of control, files, clipboard and audio. The Windows viewer's Session tools window can then save video to a new local MKV file. The host shows a recording notice. Recordings preserve arrival timestamps, finalize through a temporary file, never overwrite existing files, and stop at 2 GiB. Audio recording and Android recording are still pending. Revoking recording rights ends the active session.

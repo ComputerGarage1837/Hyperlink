@@ -17,7 +17,7 @@ function Run([string]$Tool,[string[]]$Arguments) {
     if($LASTEXITCODE -ne 0) { throw "$Tool failed ($LASTEXITCODE)" }
 }
 Run "$tools/aapt2.exe" @('compile','--dir',"$PSScriptRoot/res",'-o',"$stage/resources.zip")
-Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','6','--version-name','0.5.1','--min-sdk-version','26','--target-sdk-version','36',"$stage/resources.zip")
+Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','8','--version-name','0.5.3','--min-sdk-version','26','--target-sdk-version','36',"$stage/resources.zip")
 $sources = @(Get-ChildItem "$PSScriptRoot/src" -Recurse -Filter *.java | ForEach-Object {$_.FullName})
 Run "$Jdk/bin/javac.exe" (@('-source','8','-target','8','-Xlint:-options','-classpath',$platform,'-d',"$stage/classes") + $sources)
 Run "$Jdk/bin/jar.exe" @('cf',"$stage/classes.jar",'-C',"$stage/classes",'.')

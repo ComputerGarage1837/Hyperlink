@@ -16,7 +16,8 @@ namespace Hyperlink
         readonly Func<byte[], bool> sendAudio;
         SystemAudioCapture audio;
         FileTransfers files;
-        string testClipboard = "";
+        string testClipboard = ""; volatile bool recording;
+        public bool Recording { get { return recording; } }
         public SessionExtensions(Func<string> ownerFolder, bool test, Func<byte[], bool> audioSender = null) { folder = ownerFolder; synthetic = test; sendAudio = audioSender; }
         public bool OwnsAudio(byte[] packet) { return audio != null && audio.Owns(packet); }
         public void StartAudio() { if (audio != null) audio.Start(); }
@@ -30,6 +31,8 @@ namespace Hyperlink
         {
             if (peer == null) return false;
             if (operation == "file-cancel") return true;
+            if (operation == "recording-stop") return true;
+            if (operation == "recording-start") return peer.Recording;
             if (operation == "audio-stop") return true;
             if (operation == "audio-start") return peer.Audio;
             if (operation == "file-list" || operation == "file-download-begin" || operation == "file-download-read") return peer.FileRead;
@@ -41,6 +44,8 @@ namespace Hyperlink
         public object Handle(Dictionary<string, object> message)
         {
             string operation = Text(message, "operation");
+            if (operation == "recording-start") { if (recording) throw new InvalidOperationException("Recording is already active."); recording = true; return new { recording = true }; }
+            if (operation == "recording-stop") { recording = false; return new { recording = false }; }
             if (operation == "audio-start") { if (audio != null || sendAudio == null) throw new InvalidOperationException("Audio is already active or unavailable."); audio = new SystemAudioCapture(synthetic, sendAudio); return audio.Describe(); }
             if (operation == "audio-stop") { if (audio != null) audio.Dispose(); audio = null; return new { stopped = true }; }
             if (operation == "file-cancel") { if (files != null) files.Dispose(); files = null; return new { cancelled = true }; }
@@ -79,7 +84,7 @@ namespace Hyperlink
                 if (Char.IsHighSurrogate(text[i])) { if (++i >= text.Length || !Char.IsLowSurrogate(text[i])) throw new InvalidDataException("Invalid Unicode text."); }
                 else if (Char.IsLowSurrogate(text[i])) throw new InvalidDataException("Invalid Unicode text.");
         }
-        public void Dispose() { try { if (files != null) files.Dispose(); files = null; } finally { if (audio != null) audio.Dispose(); audio = null; } }
+        public void Dispose() { recording = false; try { if (files != null) files.Dispose(); files = null; } finally { if (audio != null) audio.Dispose(); audio = null; } }
     }
 
     public sealed partial class Remote

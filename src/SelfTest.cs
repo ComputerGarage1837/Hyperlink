@@ -103,6 +103,8 @@ namespace Hyperlink
             {
                 int extensionChecks = ExtensionTests.Run(Path.Combine(root, "extensions"));
                 results.Add(UpdateTests.Run(Path.Combine(root, "updates")));
+                results.Add(WakeTests.Run());
+                results.Add(RecordingTests.Run(Path.Combine(root, "recordings")));
                 results.Add(extensionChecks + " file, clipboard and system-audio checks passed, including encrypted transfer and live revocation.");
                 var textInput = new InputController(true);
                 textInput.Apply(new Dictionary<string, object> { { "type", "text" }, { "text", "Family \u00e9 \ud83d\ude00" } }, null);

@@ -1,4 +1,4 @@
-param([string]$Output = (Join-Path $PSScriptRoot 'build'), [switch]$Test)
+param([string]$Output = (Join-Path $PSScriptRoot 'build'), [switch]$Test, [switch]$Video)
 $ErrorActionPreference = 'Stop'
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 if (-not (Test-Path -LiteralPath $compiler)) { throw 'Hyperlink needs Windows with .NET Framework 4.8.' }
@@ -11,6 +11,7 @@ $audioReferences = @(Get-HyperlinkAudioReferences)
 if ($LASTEXITCODE -ne 0) { throw 'Compilation failed.' }
 Copy-HyperlinkAudioRuntime ([IO.Path]::GetDirectoryName($exe))
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $Output
+if ($Video) { . "$PSScriptRoot/scripts/VideoDependencies.ps1"; Copy-HyperlinkVideoRuntime $Output }
 New-Item -ItemType Directory -Path (Join-Path $Output 'docs') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs/ROADMAP.md') -Destination (Join-Path $Output 'docs')
 if ($Test) {

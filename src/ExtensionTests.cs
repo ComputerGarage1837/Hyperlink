@@ -51,9 +51,10 @@ namespace Hyperlink
             SessionExtensions.CheckText("Family \u00e9 \ud83d\ude00"); checks++;
             foreach (string text in new[] { new string('x', 1025), "a\0b", "\ud800", "\udc00" }) Denied(delegate { SessionExtensions.CheckText(text); }, "Invalid clipboard text accepted.");
             var peer = new Peer { FileRead = true }; Check(SessionExtensions.Allowed(peer, "file-list") && !SessionExtensions.Allowed(peer, "clipboard-read") && !SessionExtensions.Allowed(peer, "file-upload-begin"), "File permission implies another right.");
+            string hostNotice = "";
             using (var owner = new Store(Path.Combine(root, "owner")))
             using (var viewer = new Store(Path.Combine(root, "viewer")))
-            using (var host = new Host(owner, delegate(string name, bool pair) { return 1; }, delegate { }, true))
+            using (var host = new Host(owner, delegate(string name, bool pair) { return 1; }, delegate(string message) { Volatile.Write(ref hostNotice, message); }, true))
             using (var remote = new Remote(viewer))
             {
                 remote.Frame = delegate(System.Drawing.Bitmap image) { image.Dispose(); };
@@ -85,6 +86,23 @@ namespace Hyperlink
                     client.Call("audio-start"); Wait(delegate { return Volatile.Read(ref audioFrames) > stoppedFrames; });
                     lock (owner.Sync) owner.Data.Peers[0].Audio = false;
                     Thread.Sleep(120); stoppedFrames = Volatile.Read(ref audioFrames); Thread.Sleep(120); Check(Volatile.Read(ref audioFrames) == stoppedFrames, "Revoked audio continued streaming.");
+                    Denied(delegate { client.Call("recording-start"); }, "Recording started without its separate permission.");
+                    lock (owner.Sync) owner.Data.Peers[0].Recording = true;
+                    using (var recorder = new JpegRecording(Path.Combine(folder, "network-recording.mkv"), remote.Width, remote.Height))
+                    {
+                        int recorded = 0;
+                        Action<byte[]> capture = delegate(byte[] jpeg) { recorder.Accept(jpeg); Interlocked.Increment(ref recorded); };
+                        client.Call("recording-start"); remote.EncodedFrame += capture;
+                        Wait(delegate { return Volatile.Read(ref recorded) >= 3 && Volatile.Read(ref hostNotice).StartsWith("RECORDING:", StringComparison.Ordinal); });
+                        remote.EncodedFrame -= capture; recorder.Stop(); recorder.Completion.GetAwaiter().GetResult();
+                        client.Call("recording-stop");
+                        Check(File.Exists(Path.Combine(folder, "network-recording.mkv")), "Encrypted session recording was not saved.");
+                        Wait(delegate { return Volatile.Read(ref hostNotice).StartsWith("Recording stopped", StringComparison.Ordinal); });
+                    }
+                    int ended = 0; remote.Ended += delegate { Interlocked.Exchange(ref ended, 1); };
+                    client.Call("recording-start"); lock (owner.Sync) owner.Data.Peers[0].Recording = false;
+                    Wait(delegate { return Volatile.Read(ref ended) != 0; });
+                    Check(!remote.Connected, "Revoked recording permission left the session active.");
                 }
             }
             return checks;

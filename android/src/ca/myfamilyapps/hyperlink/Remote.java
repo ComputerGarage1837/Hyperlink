@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.*;
 
 final class Remote implements Closeable {
-    interface AudioSink { void accept(byte[] packet); }
+    interface AudioSink { void accept(byte[] packet); void close(); }
     private final ReplyInbox replies = new ReplyInbox();
     volatile boolean extensions;
     volatile AudioSink audioSink;
@@ -118,7 +118,7 @@ final class Remote implements Closeable {
     void release() { input("type", "release"); }
     private void finish(String reason) {
         if (!closed.compareAndSet(false, true)) return;
-        replies.close(); audioSink = null;
+        replies.close(); AudioSink sink = audioSink; audioSink = null; if (sink != null) sink.close();
         writer.shutdownNow(); if (heartbeat != null) heartbeat.shutdownNow();
         PinnedWire connection = wire; if (connection != null) { Thread closer = new Thread(() -> { try { connection.close(); } catch (IOException ignored) {} }, "Hyperlink disconnect"); closer.setDaemon(true); closer.start(); }
         listener.ended(reason);

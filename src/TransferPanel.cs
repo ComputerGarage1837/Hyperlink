@@ -13,7 +13,7 @@ namespace Hyperlink
     {
         public ExtensionPermissions(Store store, Host host, Peer peer)
         {
-            Text = "Permissions · " + peer.Name; Size = new Size(600, 520); StartPosition = FormStartPosition.CenterParent;
+            Text = "Permissions · " + peer.Name; Size = new Size(600, 555); StartPosition = FormStartPosition.CenterParent;
             BackColor = Theme.Background; ForeColor = Theme.Text;
             Font = Theme.Font(10);
             var body = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(20), FlowDirection = FlowDirection.TopDown, WrapContents = false };
@@ -25,6 +25,7 @@ namespace Hyperlink
             var toHost = Check(body, "Send clipboard text to this computer", peer.ClipboardToHost);
             var fromHost = Check(body, "Read clipboard text from this computer", peer.ClipboardFromHost);
             var audio = Check(body, "Listen to this computer's system playback audio", peer.Audio);
+            var recording = Check(body, "Record this session on the viewer computer", peer.Recording);
             var folder = new TextBox { Width = 530, ReadOnly = true, Text = store.Data.SharedFolder ?? "" }; body.Controls.Add(folder);
             var choose = Theme.Button("Choose shared folder"); choose.Width = 250; body.Controls.Add(choose);
             choose.Click += delegate { using (var dialog = new FolderBrowserDialog { Description = "This folder applies to all peers with file access. Subfolders are not shared." }) if (dialog.ShowDialog(this) == DialogResult.OK) folder.Text = dialog.SelectedPath; };
@@ -39,17 +40,17 @@ namespace Hyperlink
                     {
                         if (!store.Data.Peers.Contains(peer)) throw new InvalidOperationException("This peer was revoked.");
                         bool oldControl = peer.Control, oldRead = peer.FileRead, oldWrite = peer.FileWrite,
-                            oldToHost = peer.ClipboardToHost, oldFromHost = peer.ClipboardFromHost, oldAudio = peer.Audio;
+                            oldToHost = peer.ClipboardToHost, oldFromHost = peer.ClipboardFromHost, oldAudio = peer.Audio, oldRecording = peer.Recording;
                         string oldFolder = store.Data.SharedFolder;
                         try
                         {
                         peer.Control = control.Checked; peer.FileRead = read.Checked; peer.FileWrite = write.Checked;
-                        peer.ClipboardToHost = toHost.Checked; peer.ClipboardFromHost = fromHost.Checked; peer.Audio = audio.Checked; store.Data.SharedFolder = folder.Text; store.Save();
+                        peer.ClipboardToHost = toHost.Checked; peer.ClipboardFromHost = fromHost.Checked; peer.Audio = audio.Checked; peer.Recording = recording.Checked; store.Data.SharedFolder = folder.Text; store.Save();
                         }
                         catch
                         {
                             peer.Control = oldControl; peer.FileRead = oldRead; peer.FileWrite = oldWrite;
-                            peer.ClipboardToHost = oldToHost; peer.ClipboardFromHost = oldFromHost; peer.Audio = oldAudio;
+                            peer.ClipboardToHost = oldToHost; peer.ClipboardFromHost = oldFromHost; peer.Audio = oldAudio; peer.Recording = oldRecording;
                             store.Data.SharedFolder = oldFolder;
                             throw;
                         }
@@ -91,6 +92,7 @@ namespace Hyperlink
             Button(clipBar, "Copy received text", delegate { try { if (clipboard.Text.Length == 0) Clipboard.Clear(); else Clipboard.SetText(clipboard.Text); } catch { status.Text = "Your local clipboard is busy."; } });
             var audioBar = new FlowLayoutPanel { Width = 640, Height = 48 }; body.Controls.Add(audioBar);
             Button(audioBar, "System audio", delegate { AudioPanel.ShowFor(remote, this); });
+            Button(audioBar, "Record video", delegate { RecordingWindow.ShowFor(remote, this); });
             FormClosed += delegate { if (cancellation != null) cancellation.Cancel(); client.Dispose(); };
         }
         static void Button(Control parent, string text, Action action) { var button = Theme.Button(text); button.Width = 150; button.Height = 40; button.Click += delegate { action(); }; parent.Controls.Add(button); }

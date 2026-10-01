@@ -25,7 +25,7 @@ namespace Hyperlink
         public string Id, Name, PublicKey;
         public bool Control;
         public bool FileRead, FileWrite, ClipboardToHost, ClipboardFromHost;
-        public bool Audio;
+        public bool Audio, Recording;
     }
     public sealed class Device
     {
@@ -521,6 +521,7 @@ namespace Hyperlink
                         {
                             lock (gate) if (active != sessionWire || listener != server) break;
                             var timer = Stopwatch.StartNew();
+                            var recordingSession = extensions; if (recordingSession != null && recordingSession.Recording) lock (store.Sync) { if (!store.Data.Peers.Any(p => p.Id == id && p.Recording)) throw new UnauthorizedAccessException("Recording permission ended."); }
                             byte[] frame = capture.Frame();
                             lock (gate) if (active != sessionWire || listener != server) break;
                             sessionWire.Send(10, frame);
@@ -556,9 +557,11 @@ namespace Hyperlink
                                 });
                                 result = extensions.Handle(message); ok = true;
                             }
-                            catch (Exception) { if (extensions != null) try { extensions.Dispose(); } catch { } extensions = null; }
+                            catch (Exception) { if (extensions != null && extensions.Recording) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { } extensions = null; }
                             wire.SendJson(new { kind = "extension", request = request, ok = ok, result = result });
                             if (ok && extensionOperation == "audio-start") extensions.StartAudio();
+                        if (ok && extensionOperation == "recording-start") status("RECORDING: this viewer is saving the session.");
+                        if (ok && extensionOperation == "recording-stop") status("Recording stopped; the viewer is still connected.");
                         }
                         continue;
                     }
@@ -579,7 +582,7 @@ namespace Hyperlink
             }
             finally
             {
-                if (extensions != null) try { extensions.Dispose(); } catch { }
+                if (extensions != null && extensions.Recording) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { }
                 if (wire != null) wire.Dispose(); else client.Close();
                 lock (gate)
                 {
@@ -630,6 +633,7 @@ namespace Hyperlink
         public int Width, Height;
         public bool Connected { get { return wire != null; } }
         public Action<Bitmap> Frame;
+        public Action<byte[]> EncodedFrame;
         public Action<string> Ended;
         public Remote(Store state) { store = state; }
         void Authenticate(Wire connection, object hello, string fingerprint)
@@ -682,7 +686,7 @@ namespace Hyperlink
                             using (var stream = new MemoryStream(bytes)) using (var decoded = Image.FromStream(stream, true, true))
                             {
                                 if (decoded.Width != Width || decoded.Height != Height) throw new InvalidDataException("Frame size changed unexpectedly.");
-                                var bitmap = new Bitmap(decoded); var callback = Frame;
+                                var recorder = EncodedFrame; if (recorder != null) recorder(bytes); var bitmap = new Bitmap(decoded); var callback = Frame;
                                 if (callback != null) callback(bitmap); else bitmap.Dispose();
                             }
                         }
