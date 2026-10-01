@@ -96,6 +96,8 @@ namespace Hyperlink
 
     public sealed partial class Remote
     {
+        internal readonly object AudioSync = new object();
+        internal volatile Dictionary<string, object> AudioDescriptor;
         public bool SupportsExtensions { get; private set; }
         public event Action<Dictionary<string, object>> ExtensionReply;
         public event Action<byte[]> AudioFrame;
@@ -132,6 +134,17 @@ namespace Hyperlink
         public Dictionary<string, object> Call(string operation, params object[] fields)
         { return Call(operation, CancellationToken.None, fields); }
         public Dictionary<string, object> Call(string operation, CancellationToken cancellation, params object[] fields)
+        {
+            if (operation != "audio-start" && operation != "audio-stop") return CallCore(operation, cancellation, fields);
+            lock (remote.AudioSync)
+            {
+                if (operation == "audio-start" && remote.AudioDescriptor != null) throw new IOException("Audio is already active for playback or recording.");
+                var result = CallCore(operation, cancellation, fields);
+                remote.AudioDescriptor = operation == "audio-start" ? new Dictionary<string, object>(result) : null;
+                return result;
+            }
+        }
+        Dictionary<string, object> CallCore(string operation, CancellationToken cancellation, params object[] fields)
         {
             if (disposed || pending.Count >= 4) throw new IOException("The session is closed or busy.");
             string id = Guid.NewGuid().ToString("N"); var wait = new Pending();

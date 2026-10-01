@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -17,7 +18,8 @@ namespace Hyperlink
             var pending = active.Keys.ToArray(); foreach (var recorder in pending) recorder.Stop();
             Task.WhenAll(pending.Select(recorder => recorder.worker)).GetAwaiter().GetResult();
         }
-        sealed class Frame { public byte[] Bytes; public long Milliseconds; }
+        sealed class Frame { public byte[] Bytes; public long Milliseconds; public bool Audio; }
+        readonly byte[] audioId;
         readonly BlockingCollection<Frame> frames = new BlockingCollection<Frame>(8);
         readonly Stopwatch clock = Stopwatch.StartNew();
         readonly string destination, temporary;
@@ -25,8 +27,16 @@ namespace Hyperlink
         readonly Task worker;
         int stopped;
         public Task Completion { get { return worker; } }
-        internal JpegRecording(string file, int w, int h)
+        internal JpegRecording(string file, int w, int h) : this(file, w, h, null) { }
+        internal JpegRecording(string file, int w, int h, Dictionary<string, object> audio)
         {
+            if (audio != null)
+            {
+                Guid id;
+                if (!Guid.TryParseExact(Convert.ToString(audio["id"]), "N", out id) || Convert.ToInt32(audio["sampleRate"]) != 48000 || Convert.ToInt32(audio["channels"]) != 2 || Convert.ToInt32(audio["bits"]) != 16 || Convert.ToInt32(audio["encoding"]) != 1)
+                    throw new InvalidDataException("Unsupported recording audio format.");
+                audioId = id.ToByteArray();
+            }
             destination = Path.GetFullPath(file);
             if (!String.Equals(Path.GetExtension(destination), ".mkv", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Choose a .mkv recording file.");
             using (var folder = new FileTransfers(Path.GetDirectoryName(destination))) { }
@@ -47,6 +57,21 @@ namespace Hyperlink
             }
             catch (InvalidOperationException) { }
         }
+        internal void AcceptAudio(byte[] packet)
+        {
+            if (audioId == null || Volatile.Read(ref stopped) != 0) return;
+            if (packet == null || packet.Length < 20 || packet.Length > 8208 || (packet.Length - 16) % 4 != 0) throw new InvalidDataException("Invalid recording audio packet.");
+            for (int i = 0; i < 16; i++) if (packet[i] != audioId[i]) throw new InvalidDataException("Recording audio stream changed.");
+            byte[] pcm = new byte[packet.Length - 16]; Buffer.BlockCopy(packet, 16, pcm, 0, pcm.Length);
+            try { if (!frames.TryAdd(new Frame { Bytes = pcm, Milliseconds = clock.ElapsedMilliseconds, Audio = true })) Stop(); }
+            catch (InvalidOperationException) { }
+        }
+        internal static void AudioSample(Stream output, byte[] pcm, long milliseconds)
+        {
+            if (pcm == null || pcm.Length < 4 || pcm.Length > 8192 || pcm.Length % 4 != 0 || milliseconds < 0) throw new InvalidDataException("Invalid recording audio sample.");
+            byte[] cluster = VideoMux.Element(0x1F43B675, VideoMux.Join(VideoMux.Number(0xE7, milliseconds), VideoMux.Element(0xA3, VideoMux.Join(new byte[] { 0x82, 0, 0, 0x80 }, pcm))));
+            output.Write(cluster, 0, cluster.Length);
+        }
         internal void Stop()
         {
             if (Interlocked.Exchange(ref stopped, 1) == 0) frames.CompleteAdding();
@@ -58,13 +83,14 @@ namespace Hyperlink
             {
                 using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.SequentialScan))
                 {
-                    Header(output, width, height);
+                Header(output, width, height, audioId != null);
                     long first = -1;
                     foreach (Frame frame in frames.GetConsumingEnumerable())
                     {
                         if (first < 0) first = frame.Milliseconds;
                         if (output.Length + frame.Bytes.Length + 64 > 2L * 1024 * 1024 * 1024) { Stop(); break; }
-                        Sample(output, frame.Bytes, frame.Milliseconds - first); count++;
+                    if (frame.Audio) AudioSample(output, frame.Bytes, frame.Milliseconds - first);
+                    else { Sample(output, frame.Bytes, frame.Milliseconds - first); count++; }
                     }
                     output.Flush(true);
                 }
@@ -78,7 +104,8 @@ namespace Hyperlink
                 finally { byte ignored; active.TryRemove(this, out ignored); }
             }
         }
-        internal static void Header(Stream output, int width, int height)
+        internal static void Header(Stream output, int width, int height) { Header(output, width, height, false); }
+        internal static void Header(Stream output, int width, int height, bool audio)
         {
             byte[] header = VideoMux.Element(0x1A45DFA3, VideoMux.Join(VideoMux.Number(0x4286, 1), VideoMux.Number(0x42F7, 1), VideoMux.Number(0x42F2, 4), VideoMux.Number(0x42F3, 8), VideoMux.Text(0x4282, "matroska"), VideoMux.Number(0x4287, 4), VideoMux.Number(0x4285, 2)));
             output.Write(header, 0, header.Length);
@@ -86,6 +113,14 @@ namespace Hyperlink
             byte[] info = VideoMux.Element(0x1549A966, VideoMux.Join(VideoMux.Number(0x2AD7B1, 1000000), VideoMux.Text(0x4D80, "Hyperlink"), VideoMux.Text(0x5741, "Hyperlink")));
             output.Write(info, 0, info.Length);
             byte[] track = VideoMux.Element(0x1654AE6B, VideoMux.Element(0xAE, VideoMux.Join(VideoMux.Number(0xD7, 1), VideoMux.Number(0x73C5, 1), VideoMux.Number(0x83, 1), VideoMux.Text(0x86, "V_MJPEG"), VideoMux.Element(0xE0, VideoMux.Join(VideoMux.Number(0xB0, width), VideoMux.Number(0xBA, height))))));
+            if (audio)
+            {
+                byte[] rate = BitConverter.GetBytes(48000.0); if (BitConverter.IsLittleEndian) Array.Reverse(rate);
+                byte[] entry = VideoMux.Element(0xAE, VideoMux.Join(VideoMux.Number(0xD7, 2), VideoMux.Number(0x73C5, 2), VideoMux.Number(0x83, 2), VideoMux.Text(0x86, "A_PCM/INT/LIT"), VideoMux.Element(0xE1, VideoMux.Join(VideoMux.Element(0xB5, rate), VideoMux.Number(0x9F, 2), VideoMux.Number(0x6264, 16)))));
+                // Append the audio TrackEntry to the same Tracks element.
+                byte[] video = VideoMux.Element(0xAE, VideoMux.Join(VideoMux.Number(0xD7, 1), VideoMux.Number(0x73C5, 1), VideoMux.Number(0x83, 1), VideoMux.Text(0x86, "V_MJPEG"), VideoMux.Element(0xE0, VideoMux.Join(VideoMux.Number(0xB0, width), VideoMux.Number(0xBA, height)))));
+                track = VideoMux.Element(0x1654AE6B, VideoMux.Join(video, entry));
+            }
             output.Write(track, 0, track.Length);
         }
         internal static void Sample(Stream output, byte[] jpeg, long milliseconds)

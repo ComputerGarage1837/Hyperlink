@@ -82,7 +82,7 @@ final class Remote implements Closeable {
                 while (!closed.get()) {
                     PinnedWire.Packet packet = connection.read();
                 if (packet.kind == 10) {listener.frame(packet.bytes);MjpegRecording capture=recording.get();if(capture!=null)capture.accept(packet.bytes);}
-                    else if (packet.kind == 11) { AudioSink sink = audioSink; if (sink != null) sink.accept(packet.bytes); }
+                    else if (packet.kind == 11) { AudioSink sink = audioSink; if (sink != null) sink.accept(packet.bytes); MjpegRecording capture=recording.get();if(capture!=null)capture.acceptAudio(packet.bytes); }
                     else {
                         JSONObject event = Json.parse(packet.bytes, 16384);
                         if (event.optString("kind").equals("extension")) {
@@ -100,7 +100,16 @@ final class Remote implements Closeable {
         try { writer.execute(() -> { try { if (!closed.get()) send(wire, packet); } catch (IOException e) { finish("Connection interrupted"); } }); }
         catch (RejectedExecutionException e) { finish("Connection ended because input could not be delivered safely"); }
     }
+    volatile JSONObject audioFormat;
+    private final Object audioLock=new Object();
     JSONObject extension(String operation, Object... values) throws Exception {
+        if(!operation.equals("audio-start")&&!operation.equals("audio-stop"))return extensionCore(operation,values);
+        synchronized(audioLock){
+            if(operation.equals("audio-start")&&audioFormat!=null)throw new IOException("Audio is already active for playback or recording");
+            JSONObject result=extensionCore(operation,values);audioFormat=operation.equals("audio-start")?result:null;return result;
+        }
+    }
+    private JSONObject extensionCore(String operation, Object... values) throws Exception {
         if (!extensions || closed.get()) throw new IOException("This host does not offer session tools");
         String request = java.util.UUID.randomUUID().toString().replace("-", "");
         CompletableFuture<byte[]> future = replies.register(request);

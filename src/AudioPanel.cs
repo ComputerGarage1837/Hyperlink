@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Hyperlink
@@ -11,7 +12,7 @@ namespace Hyperlink
         readonly ExtensionClient client;
         readonly Label status;
         readonly Button start, stop;
-        readonly object sync = new object();
+        readonly object sync = new object(); int ownsAudio;
         SystemAudioPlayback player;
         volatile bool closed, starting;
         public AudioPanel(Remote connection)
@@ -41,7 +42,7 @@ namespace Hyperlink
         }
         void Receive(byte[] packet) { SystemAudioPlayback value; lock (sync) value = player; if (value != null) value.Add(packet); }
         void DisposePlayer() { SystemAudioPlayback value; lock (sync) { value = player; player = null; } if (value != null) Task.Run(delegate { value.Dispose(); }); }
-        void StopHost() { try { client.Call("audio-stop"); } catch { remote.Dispose(); } }
+        void StopHost() { if (Interlocked.Exchange(ref ownsAudio, 0) == 0) return; try { client.Call("audio-stop"); } catch { remote.Dispose(); } }
         void StartListening()
         {
             if (closed || starting) return; starting = true; start.Enabled = false; status.Text = "Requesting authorized playback…";
@@ -49,7 +50,7 @@ namespace Hyperlink
             {
                 try
                 {
-                    if (closed) return; var descriptor = client.Call("audio-start");
+                    if (closed) return; var descriptor = client.Call("audio-start"); Interlocked.Exchange(ref ownsAudio, 1);
                     if (closed) return; var value = new SystemAudioPlayback(descriptor);
                     lock (sync) { if (!closed) { player = value; value = null; } }
                     if (value != null) value.Dispose();

@@ -82,6 +82,8 @@ namespace Hyperlink
                     remote.AudioFrame += delegate(byte[] packet) { if (packet.Length != 3856) invalidAudio = true; Interlocked.Increment(ref audioFrames); };
                     var audio = client.Call("audio-start"); Check(Wire.Number(audio, "sampleRate") == 48000 && Wire.Number(audio, "bits") == 16, "Invalid audio negotiation.");
                     Wait(delegate { return Volatile.Read(ref audioFrames) >= 3; }); Check(!invalidAudio, "Unbounded audio frame.");
+                    using (var otherAudio = new ExtensionClient(remote)) { Denied(delegate { otherAudio.Call("audio-start"); }, "Two tools acquired the same audio capture."); }
+                    Check(remote.Connected && remote.AudioDescriptor != null, "Duplicate audio acquisition stopped the existing session.");
                     client.Call("audio-stop"); int stoppedFrames = Volatile.Read(ref audioFrames); Thread.Sleep(120); Check(Volatile.Read(ref audioFrames) == stoppedFrames, "Audio continued after stop acknowledgement.");
                     client.Call("audio-start"); Wait(delegate { return Volatile.Read(ref audioFrames) > stoppedFrames; });
                     lock (owner.Sync) owner.Data.Peers[0].Audio = false;

@@ -54,6 +54,12 @@ The owner can grant recording independently of control, files, clipboard and aud
 ### Local display privacy (0.5.4)
 Windows and Android viewers can request local display privacy with a separate owner grant. On supported Windows 10 version 2004 or later, opaque capture-excluded covers hide local displays and allow pointer input through. Ctrl+Alt+Shift+H restores the displays and disconnects the viewer. Disconnect, display changes, session lock, window closure and a 30-minute safety timeout also restore displays. Active recording is shown on the covers. A small owned-window physical check passed for capture exclusion and emergency recovery; full multi-monitor use remains a pilot check. This does not add login-screen or UAC control.
 
+### Optional system-audio recording (0.5.6)
+
+Windows recording has an **Include system audio** checkbox. Android offers separate video-only and video-with-audio buttons. Sound requires the owner's audio grant as well as the recording grant. Stop playback before starting a recording with sound; one tool owns each audio capture. Recordings contain MJPEG video and 48 kHz stereo 16-bit PCM in a local MKV file. Microphone capture is not used.
+
+Windows and Android fixtures pass stream-identity validation and decode independently with FFmpeg. Packet arrival times determine the timeline; physical-device sound, synchronization, storage speed, and prolonged sessions still need pilot testing.
+
 ### Android video recording (0.5.5)
 The Android viewer can request the same separate recording grant, save MKV video privately on the phone, and export a verified copy to a selected local storage folder. Existing files are not overwritten. Clips stop at 1 GiB or if storage cannot keep up. The Recordings screen lists finalized clips and supports export or deletion. Audio recording is still pending. Java recording finalization, failure cleanup, no-overwrite and independent media playback/timing checks passed; physical Android recording and storage-provider use remain pilot checks.
 

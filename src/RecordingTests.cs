@@ -45,7 +45,21 @@ namespace Hyperlink
                 JpegRecording.Header(output, 64, 32);
                 foreach (long ms in new long[] { 0, 125, 500 }) JpegRecording.Sample(output, jpeg, ms);
             }
-            return "Recording permission, file finalization, no-overwrite and failed-recording cleanup checks passed.";
+            var audio = new System.Collections.Generic.Dictionary<string, object> { { "id", Guid.NewGuid().ToString("N") }, { "sampleRate", 48000 }, { "channels", 2 }, { "bits", 16 }, { "encoding", 1 } };
+            byte[] packet = new byte[16 + 1920]; Buffer.BlockCopy(Guid.Parse((string)audio["id"]).ToByteArray(), 0, packet, 0, 16);
+            for (int n = 0; n < 480; n++) { short sample = (short)(Math.Sin(n * 2 * Math.PI * 1000 / 48000) * 12000); for (int channel = 0; channel < 2; channel++) { packet[16 + n * 4 + channel * 2] = (byte)sample; packet[17 + n * 4 + channel * 2] = (byte)(sample >> 8); } }
+            using (var recorder = new JpegRecording(Path.Combine(folder, "audio.mkv"), 64, 32, audio))
+            {
+                recorder.Accept(jpeg); recorder.AcceptAudio(packet);
+                byte[] wrong = (byte[])packet.Clone(); wrong[0] ^= 1; bool refused = false;
+                try { recorder.AcceptAudio(wrong); } catch (InvalidDataException) { refused = true; }
+                if (!refused) throw new Exception("Recording accepted a different audio stream.");
+                recorder.Stop(); recorder.Completion.GetAwaiter().GetResult();
+            }
+            audio["encoding"] = 3; bool formatRefused = false;
+            try { using (var recorder = new JpegRecording(Path.Combine(folder, "bad-audio.mkv"), 64, 32, audio)) { } } catch (InvalidDataException) { formatRefused = true; }
+            if (!formatRefused) throw new Exception("Recording accepted an unsupported audio format.");
+            return "Recording permission, file finalization, no-overwrite, audio stream validation and failed-recording cleanup checks passed.";
         }
     }
 }
