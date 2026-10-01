@@ -1,19 +1,9 @@
-# Hyperlink Android viewer
+# Hyperlink Android 0.6.0
 
-Native Java / Android framework viewer, Android 8 or later. No third-party runtime dependencies.
+Enter the eight-digit computer ID and the PIN chosen in Windows **Unattended access**. No family account is required. Saved computers reconnect using the phone's device key. Long invitations and family-account controls are under Advanced.
 
-Build with JDK 21 and Android SDK platform 36 plus build-tools 36.0.0:
+Build with JDK 21 and Android SDK/build tools 36 using `./android/build.ps1 -Sdk <sdk-directory> -Jdk <jdk-directory>`. Run `./android/test.ps1 -Jdk <jdk-directory>`. Sign using the same private personal key as the installed APK. Minimum Android is API 26.
 
-```powershell
-./android/build.ps1 -Sdk C:/path/to/android-sdk -Jdk C:/path/to/jdk -Output C:/path/to/build
-```
+Java-WebSocket 1.6.0 and SLF4J 2.0.17 are digest-pinned; licenses are in APK assets. Outer HTTPS validates the relay domain. Native JSSE TLS 1.2 over that relay pins the Windows certificate. An offline-authority attestation is verified before PIN transmission. The PIN is cleared from its input and is not persisted.
 
-The build creates an unsigned APK. Installation requires APK signing with your private personal key. Keep that key outside source control and release archives; subsequent updates require the same key. A purchased Windows signing certificate is unrelated to APK signing.
-
-`./android/test.ps1 -Jdk C:/path/to/jdk` verifies the shipped signing and TLS implementations against a synthetic loopback Windows host. It checks certificate pin rejection, RSA pairing, JPEG decoding, Unicode input and host rejection of text from a read-only client. No desktop input is injected. CI runs these checks independently of an Android emulator. Full APK launch, Android Keystore persistence, touch controls and rotation still require emulator or physical-device verification.
-
-The attended viewer pairs using a five-minute invitation, pins the Windows host certificate, and proves possession of a nonexportable Android Keystore RSA key. Every session needs host approval. Input rights are checked by the host. The account API uses its fixed HTTPS origin, normal platform CA validation, DPoP and explicit viewer trust. Remembered refresh credentials are encrypted with an Android Keystore AES key; passwords and MFA codes are not saved. Backups are disabled. Desktop frames are not persisted.
-
-This is the Windows draft's capped 30 fps JPEG transport. It does not implement the planned hardware 120 fps engine, hosted desktop tickets, unattended access, files, clipboard, audio or printing. Family account devices are listed without a connect action until host-side family policy enforcement is ready. Unicode text requires the updated Windows host; older hosts retain view/touch support.
-
-Touchpad/direct touch, long-press drag, two-finger scroll, pinch zoom, right-click, keyboard and modifier buttons are available. Backgrounding closes the session; reconnect requires approval again. The viewer blocks screenshots to protect desktop content. Do not disable host approval or certificate pinning to work around a connection failure.
+Windows must remain signed in. The Java relay implementation passed public-domain PIN pairing, saved reconnect and synthetic JPEG delivery. Physical-phone UI, gestures, rotation, audio and recordings still need device testing. See the root README for current limitations.

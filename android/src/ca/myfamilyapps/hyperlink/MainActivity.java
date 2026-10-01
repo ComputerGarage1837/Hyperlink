@@ -25,47 +25,54 @@ public final class MainActivity extends Activity {
         scroll.addView(body); root.addView(scroll, new LinearLayout.LayoutParams(-1,-1)); setContentView(root);
         label(body,"Hyperlink",32,MINT); label(body,"Private family remote desktop",16,TEXT);
         status = label(body,"Preparing your protected viewer identity…",14,TEXT);
-        label(body,"Local attended draft",22,TEXT);
-        label(body,"The owner approves pairing and each connection. This transport is limited to 30 fps.",14,TEXT);
-        button(body,"Add a computer",this::pair);
+        label(body,"Connect to a computer",22,TEXT);
+        label(body,"On Windows, open Unattended access, choose a PIN, and use the computer ID shown there.",14,TEXT);
+        final EditText computerId=field(body,"Computer ID (8 digits)",false);computerId.setInputType(InputType.TYPE_CLASS_NUMBER);computerId.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(8)});
+        final EditText connectionPin=field(body,"Windows PIN",true);connectionPin.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);connectionPin.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(12)});
+        button(body,"Connect",() -> {if(identity==null||busy)return;String id=computerId.getText().toString().trim(),pin=connectionPin.getText().toString();connectionPin.setText("");connectByPin(id,pin);});
+        label(body,"Saved computers",20,TEXT);
         button(body,"Wake a computer",() -> WakeDialog.show(this));
         button(body,"Recordings",() -> startActivity(new Intent(this,RecordingsActivity.class)));
         peers = column(this); body.addView(peers);
-        label(body,"Family account",22,TEXT); label(body,"hyperlink.myfamilyapps.ca",14,MINT);
-        username = field(body,"Username",false); password = field(body,"Password",true); code = field(body,"Authenticator code",false);
+        final LinearLayout accountBody=column(this);accountBody.setVisibility(android.view.View.GONE);
+        button(body,"Advanced / family account",() -> accountBody.setVisibility(accountBody.getVisibility()==android.view.View.GONE?android.view.View.VISIBLE:android.view.View.GONE));
+        body.addView(accountBody);
+        button(accountBody,"Manual invitation (attended LAN)",this::pair);
+        label(accountBody,"Family account",22,TEXT); label(accountBody,"hyperlink.myfamilyapps.ca",14,MINT);
+        username = field(accountBody,"Username",false); password = field(accountBody,"Password",true); code = field(accountBody,"Authenticator code",false);
         code.setInputType(InputType.TYPE_CLASS_NUMBER);
-        trust = new CheckBox(this); trust.setText("Approve this phone as a new trusted viewer"); body.addView(trust);
-        remember = new CheckBox(this); remember.setText("Remember login securely on this phone"); body.addView(remember);
-        button(body,"Sign in",() -> {
+        trust = new CheckBox(this); trust.setText("Approve this phone as a new trusted viewer"); accountBody.addView(trust);
+        remember = new CheckBox(this); remember.setText("Remember login securely on this phone"); accountBody.addView(remember);
+        button(accountBody,"Sign in",() -> {
             String name=username.getText().toString(), pass=password.getText().toString(), otp=code.getText().toString();
             boolean approve=trust.isChecked(), save=remember.isChecked(); password.setText(""); code.setText("");
             run(() -> { JSONObject result=api.call("POST","/v1/login",Json.object("username",name,"password",pass,"code",otp,
                 "trust_new_viewer",approve,"viewer_label",deviceName()),false); api.acceptLogin(result); identity.remember(save?result.getString("refresh_token"):null); },this::loadFamily);
         });
-        button(body,"Restore remembered login",() -> run(() -> {
+        button(accountBody,"Restore remembered login",() -> run(() -> {
             String token=identity.remembered(); if(token==null) throw new Exception("No remembered login. Sign in first.");
             JSONObject result=api.call("POST","/v1/refresh",Json.object("refresh_token",token),false); api.acceptLogin(result); identity.remember(result.getString("refresh_token"));
         },this::loadFamily));
-        button(body,"Accept family invitation",() -> prompt("Accept invitation","Your personal invitation",true,invite -> {
+        button(accountBody,"Accept family invitation",() -> prompt("Accept invitation","Your personal invitation",true,invite -> {
             String name=username.getText().toString(), pass=password.getText().toString(); password.setText(""); final JSONObject[] result={null};
             run(() -> result[0]=api.call("POST","/v1/register",Json.object("invite",invite,"username",name,"password",pass),false),() -> activate(result[0]));
         }));
-        button(body,"Recover account",() -> prompt("Recover account","One unused recovery code. This revokes old logins and trust.",true,recovery -> {
+        button(accountBody,"Recover account",() -> prompt("Recover account","One unused recovery code. This revokes old logins and trust.",true,recovery -> {
             String name=username.getText().toString(), pass=password.getText().toString(); password.setText(""); final JSONObject[] result={null};
             run(() -> { result[0]=api.call("POST","/v1/recover",Json.object("username",name,"password",pass,"recovery_code",recovery),false); api.forget(); identity.remember(null); },() -> activate(result[0]));
         }));
-        button(body,"Refresh family computers",this::loadFamily);
-        button(body,"Verify MFA again",() -> prompt("Verify account","Current authenticator code",false,otp -> run(() -> api.call("POST","/v1/elevate",Json.object("code",otp),true),() -> status.setText("MFA verified for five minutes."))));
-        button(body,"Trusted viewers",this::viewers);
-        button(body,"Account logins",this::logins);
-        button(body,"Sign out",() -> run(() -> {
+        button(accountBody,"Refresh family computers",this::loadFamily);
+        button(accountBody,"Verify MFA again",() -> prompt("Verify account","Current authenticator code",false,otp -> run(() -> api.call("POST","/v1/elevate",Json.object("code",otp),true),() -> status.setText("MFA verified for five minutes."))));
+        button(accountBody,"Trusted viewers",this::viewers);
+        button(accountBody,"Account logins",this::logins);
+        button(accountBody,"Sign out",() -> run(() -> {
             identity.remember(null);
             try { if(api.session!=null) api.call("POST","/v1/logins/revoke",Json.object("session_id",api.session),true); }
             finally { api.forget(); }
         },() -> { family.removeAllViews(); status.setText("Signed out. Remembered login removed."); }));
-        family=column(this); body.addView(family);
-        label(body,"Hosted connections and the high-performance engine are still being integrated. Family-enrolled Windows hosts block the temporary direct route.",14,TEXT);
-        run(() -> { identity=new Identity(getApplicationContext()); api=new Api(identity); },() -> { status.setText("Identity protected by Android Keystore. Ready to pair or sign in."); loadPeers(); });
+        family=column(this); accountBody.addView(family);
+
+        run(() -> { identity=new Identity(getApplicationContext()); api=new Api(identity); },() -> { status.setText("Ready. Enter the computer ID and PIN from Windows."); loadPeers(); });
     }
     static String deviceName() { String name=(Build.MANUFACTURER+" "+Build.MODEL).trim(); return name.substring(0,Math.min(48,name.length())); }
     static int dp(Context c,int value) { return Math.round(value*c.getResources().getDisplayMetrics().density); }
@@ -109,6 +116,15 @@ public final class MainActivity extends Activity {
                 button(peers,"Remove saved computer",() -> { try { JSONArray next=new JSONArray(); for(int j=0;j<list.length();j++)if(j!=index)next.put(list.get(j)); getSharedPreferences("peers",0).edit().putString("list",next.toString()).commit(); loadPeers(); }catch(Exception e){status.setText("Could not update saved computers");} });
             }
         }catch(Exception e){status.setText("Saved computers could not be read");}
+    }
+    private void connectByPin(String code,String pin){
+        final JSONObject[] result=new JSONObject[1];
+        run(() -> {
+            JSONObject peer=Remote.pairPin(identity,code,pin,deviceName());JSONArray list=savedPeers(),next=new JSONArray();
+            for(int i=0;i<list.length();i++)if(!list.getJSONObject(i).getString("Id").equals(peer.getString("Id")))next.put(list.get(i));
+            if(next.length()>=32)throw new Exception("Saved computer limit reached");next.put(peer);
+            if(!getSharedPreferences("peers",0).edit().putString("list",next.toString()).commit())throw new Exception("Could not save this computer");result[0]=peer;
+        },() -> {loadPeers();status.setText("Computer authorized. Connecting…");Intent intent=new Intent(this,ViewerActivity.class);intent.putExtra("peer",result[0].toString());startActivity(intent);});
     }
     private void pair() {
         if(identity==null||busy)return;

@@ -26,9 +26,11 @@ namespace Hyperlink
         public bool Control;
         public bool FileRead, FileWrite, ClipboardToHost, ClipboardFromHost;
         public bool Audio, Recording, Privacy;
+        public bool Unattended;
     }
     public sealed class Device
     {
+        public string RelayCode;
         public string Id, Name, Address, Fingerprint;
         public int Port;
         public bool Control;
@@ -42,6 +44,10 @@ namespace Hyperlink
         public int Port = 45831;
         public string SharedFolder;
         public bool AutoCheckUpdates, AutoInstallUpdates;
+        public bool Unattended;
+        public string PinSalt, PinHash;
+        public string RelayOwnerToken, RelayComputerCode;
+        public bool StartWithWindows;
         public List<Peer> Peers = new List<Peer>();
         public List<Device> Devices = new List<Device>();
     }
@@ -54,6 +60,7 @@ namespace Hyperlink
         public readonly X509Certificate2 Certificate;
         public readonly string Fingerprint, PublicKey, Id;
         readonly string path;
+        internal string DataDirectory { get { return Path.GetDirectoryName(path); } }
         static readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 1024 * 1024 };
 
         public Store(string directory)
@@ -390,7 +397,7 @@ namespace Hyperlink
         [DllImport("user32.dll")] public static extern bool DrawIconEx(IntPtr dc, int x, int y, IntPtr icon, int w, int h, uint step, IntPtr brush, uint flags);
     }
 
-    public sealed class Host : IDisposable
+    public sealed partial class Host : IDisposable
     {
         public bool SessionActive { get { lock (gate) return active != null; } }
         public bool BeginAutomaticUpdate(Action start) { lock (gate) { if (active != null) return false; start(); Stop(); return true; } }
@@ -449,13 +456,13 @@ namespace Hyperlink
                 new Thread(delegate() { Handle(client, server); }) { IsBackground = true }.Start();
             }
         }
-        void Handle(TcpClient client, TcpListener server)
+        void Handle(TcpClient client, TcpListener server, Stream relay = null)
         {
             Wire wire = null; bool ownsSession = false; SessionExtensions extensions = null;
             try
             {
-                client.NoDelay = true;
-                var ssl = new SslStream(client.GetStream(), false); ssl.ReadTimeout = 15000; ssl.WriteTimeout = 10000;
+                if (client != null) client.NoDelay = true;
+                var ssl = new SslStream(relay ?? client.GetStream(), false); ssl.ReadTimeout = 15000; ssl.WriteTimeout = 10000;
                 wire = new Wire(client, ssl);
                 lock (gate) { if (listener != server) return; connections.Add(wire); }
                 ssl.AuthenticateAsServer(store.Certificate, false, SslProtocols.Tls12, false);
@@ -463,10 +470,10 @@ namespace Hyperlink
                 string operation = Wire.Text(hello, "operation");
                 string id = Wire.Text(hello, "id"), publicKey = null, name = null, code = null;
                 Peer peer = null;
-                if (operation == "pair")
+                if (operation == "pair" || operation == "pair-pin")
                 {
-                    code = Wire.Text(hello, "code");
-                    lock (gate) if (!Util.Equal(code, inviteCode) || DateTime.UtcNow.Ticks > inviteExpires) throw new UnauthorizedAccessException();
+                    if (operation == "pair") code = Wire.Text(hello, "code");
+                    if (operation == "pair") lock (gate) if (!Util.Equal(code, inviteCode) || DateTime.UtcNow.Ticks > inviteExpires) throw new UnauthorizedAccessException();
                     publicKey = Wire.Text(hello, "publicKey"); name = Util.Name(Wire.Text(hello, "name"));
                     if (!Util.Equal(Util.Hash(publicKey), id)) throw new UnauthorizedAccessException();
                 }
@@ -482,30 +489,35 @@ namespace Hyperlink
                 string sig = Wire.Text(wire.ReadJson(), "signature");
                 if (!Util.Verify(publicKey, Util.Transcript(nonce, store.Fingerprint, id), sig)) throw new UnauthorizedAccessException();
                 wire.Stream.ReadTimeout = 120000;
-                if (operation == "pair")
+                if (operation == "pair" || operation == "pair-pin")
                 {
-                    int permission = approve(name, true); if (permission < 1) throw new UnauthorizedAccessException();
+                    int permission;
+                    if (operation == "pair-pin") { lock (store.Sync) if (!pinGate.Check(store.Data, Wire.Text(hello, "pin"))) throw new UnauthorizedAccessException(); permission = 2; }
+                    else permission = approve(name, true);
+                    if (permission < 1) throw new UnauthorizedAccessException();
                     lock (gate)
                     {
-                        if (listener != server || !Util.Equal(code, inviteCode) || DateTime.UtcNow.Ticks > inviteExpires) throw new UnauthorizedAccessException();
+                        if (listener != server || (operation == "pair" && (!Util.Equal(code, inviteCode) || DateTime.UtcNow.Ticks > inviteExpires))) throw new UnauthorizedAccessException();
                         lock (store.Sync)
                         {
-                            if (store.Data.Peers.Count >= 32 && !store.Data.Peers.Any(p => p.Id == id)) throw new InvalidOperationException("Device limit reached.");
+                            if (operation == "pair-pin" && !store.Data.Unattended) throw new UnauthorizedAccessException(); if (store.Data.Peers.Count >= 32 && !store.Data.Peers.Any(p => p.Id == id)) throw new InvalidOperationException("Device limit reached.");
                             store.Data.Peers.RemoveAll(p => p.Id == id);
-                            store.Data.Peers.Add(new Peer { Id = id, PublicKey = publicKey, Name = name, Control = permission == 2 }); store.Save();
+                            store.Data.Peers.Add(new Peer { Id = id, PublicKey = publicKey, Name = name, Control = permission == 2, Unattended = operation == "pair-pin" }); store.Save();
                         }
                         inviteCode = null; inviteExpires = 0;
                     }
                     wire.SendJson(new { kind = "paired", control = permission == 2 });
+                    if (operation == "pair-pin") { wire.Stream.ReadTimeout = 15000; if (Wire.Text(wire.ReadJson(), "kind") != "paired-received") throw new InvalidDataException("Missing pairing acknowledgement."); }
                     status("Paired with " + name + ". Review or revoke it under Access."); return;
                 }
                 lock (gate) if (active != null) throw new InvalidOperationException("This computer already has an active viewer.");
-                int approved = approve(name, false); if (approved < 1) throw new UnauthorizedAccessException();
+                bool unattended; lock (store.Sync) unattended = peer.Unattended && store.Data.Unattended;
+                int approved = unattended ? (peer.Control ? 2 : 1) : approve(name, false); if (approved < 1) throw new UnauthorizedAccessException();
                 bool control;
                 lock (gate)
                 {
                     if (listener != server || active != null) throw new UnauthorizedAccessException();
-                    lock (store.Sync) { peer = store.Data.Peers.FirstOrDefault(p => p.Id == id); if (peer == null) throw new UnauthorizedAccessException(); control = peer.Control && approved == 2; }
+                    lock (store.Sync) { peer = store.Data.Peers.FirstOrDefault(p => p.Id == id); if (peer == null || (unattended && (!peer.Unattended || !store.Data.Unattended))) throw new UnauthorizedAccessException(); control = peer.Control && approved == 2; }
                     active = wire; activePeer = id; ownsSession = true;
                 }
                 var capture = new Capture(Monitor, synthetic);
@@ -586,7 +598,7 @@ namespace Hyperlink
             finally
             {
                 if (extensions != null && (extensions.Recording || extensions.PrivacyActive)) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { }
-                if (wire != null) wire.Dispose(); else client.Close();
+                if (wire != null) wire.Dispose(); else if (client != null) client.Close(); else if (relay != null) relay.Dispose();
                 lock (gate)
                 {
                     if (wire != null) connections.Remove(wire);
@@ -661,7 +673,7 @@ namespace Hyperlink
         }
         public void Connect(Device device)
         {
-            Wire connection = Wire.Connect(device.Address, device.Port, device.Fingerprint);
+            Wire connection = String.IsNullOrEmpty(device.RelayCode) ? Wire.Connect(device.Address, device.Port, device.Fingerprint) : RelaySocket.Connect(device);
             try
             {
                 if (Interlocked.CompareExchange(ref wire, connection, null) != null) throw new InvalidOperationException("Already connected.");

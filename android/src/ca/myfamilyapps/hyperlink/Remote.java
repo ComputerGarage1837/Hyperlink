@@ -40,6 +40,10 @@ final class Remote implements Closeable {
         return value;
     }
     private static void validatePeer(JSONObject value) throws Exception {
+        if(value.optBoolean("Relay",false)){
+            if(!value.getString("Code").matches("[1-9][0-9]{7}")||!value.getString("Fingerprint").matches("[a-f0-9]{64}")||!value.getString("Id").matches("[a-f0-9]{64}"))throw new IOException("Invalid saved computer identity");
+            return;
+        }
         if (!value.getString("Fingerprint").matches("[a-f0-9]{64}") || !value.getString("Id").matches("[a-f0-9]{64}")) throw new IOException("Invalid host identity");
         String address = value.getString("Address"); int port = value.getInt("Port");
         if (address.length() < 1 || address.length() > 253 || port < 1 || port > 65535) throw new IOException("Invalid host address");
@@ -56,6 +60,16 @@ final class Remote implements Closeable {
         byte[] data = ("Hyperlink/1\n"+nonce+"\n"+fingerprint+"\n"+identity.id).getBytes(StandardCharsets.UTF_8);
         send(wire, Json.object("signature", Base64.getEncoder().encodeToString(Signing.sign(identity.privateKey, data))));
     }
+    static JSONObject pairPin(Identity identity,String code,String pin,String name)throws Exception {
+        if(pin==null||!pin.matches("[0-9]{6,12}"))throw new IOException("Enter the PIN you chose on Windows (6–12 digits)");
+        JSONObject target=RelayClient.lookup(code);
+        try(PinnedWire connection=RelayClient.open(target)){
+            authenticate(connection,identity,Json.object("version",1,"operation","pair-pin","id",identity.id,"publicKey",identity.xml,"name",name,"pin",pin),target.getString("fingerprint"));
+            if(!json(connection).optString("kind").equals("paired"))throw new IOException("PIN declined or unattended access is disabled");
+            connection.write(1,Json.object("kind","paired-received").toString().getBytes(StandardCharsets.UTF_8));
+            return Json.object("Relay",true,"Code",code,"Id",target.getString("id"),"Fingerprint",target.getString("fingerprint"),"Name",target.optString("name","Computer"));
+        }
+    }
     static JSONObject pair(Identity identity, JSONObject invite, String name) throws Exception {
         validatePeer(invite);
         try (PinnedWire wire = new PinnedWire(invite.getString("Address"), invite.getInt("Port"), invite.getString("Fingerprint"))) {
@@ -69,7 +83,7 @@ final class Remote implements Closeable {
         Thread reader = new Thread(() -> {
             try {
                 validatePeer(peer);
-                PinnedWire connection = new PinnedWire(peer.getString("Address"), peer.getInt("Port"), peer.getString("Fingerprint")); wire = connection;
+                PinnedWire connection = peer.optBoolean("Relay",false)?RelayClient.connect(peer):new PinnedWire(peer.getString("Address"), peer.getInt("Port"), peer.getString("Fingerprint")); wire = connection;
                 if (closed.get()) { connection.close(); return; }
                 authenticate(connection, identity, Json.object("version", 1, "operation", "connect", "id", identity.id), peer.getString("Fingerprint"));
                 JSONObject reply = json(connection);

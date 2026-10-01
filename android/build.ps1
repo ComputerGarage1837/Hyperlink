@@ -17,11 +17,14 @@ function Run([string]$Tool,[string[]]$Arguments) {
     if($LASTEXITCODE -ne 0) { throw "$Tool failed ($LASTEXITCODE)" }
 }
 Run "$tools/aapt2.exe" @('compile','--dir',"$PSScriptRoot/res",'-o',"$stage/resources.zip")
-Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','11','--version-name','0.5.6','--min-sdk-version','26','--target-sdk-version','36',"$stage/resources.zip")
+Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','12','--version-name','0.6.0','--min-sdk-version','26','--target-sdk-version','36','-A',"$PSScriptRoot/assets","$stage/resources.zip")
+. "$PSScriptRoot/../scripts/RelayDependencies.ps1"
+$relayJars=@(Get-HyperlinkRelayDependencies)
+$compileClasspath=$platform+";"+($relayJars -join ";")
 $sources = @(Get-ChildItem "$PSScriptRoot/src" -Recurse -Filter *.java | ForEach-Object {$_.FullName})
-Run "$Jdk/bin/javac.exe" (@('-source','8','-target','8','-Xlint:-options','-classpath',$platform,'-d',"$stage/classes") + $sources)
+Run "$Jdk/bin/javac.exe" (@('-source','8','-target','8','-Xlint:-options','-classpath',$compileClasspath,'-d',"$stage/classes") + $sources)
 Run "$Jdk/bin/jar.exe" @('cf',"$stage/classes.jar",'-C',"$stage/classes",'.')
-Run "$Jdk/bin/java.exe" @('-cp',"$tools/lib/d8.jar",'com.android.tools.r8.D8','--min-api','26','--lib',$platform,'--output',"$stage/dex", "$stage/classes.jar")
+Run "$Jdk/bin/java.exe" (@('-cp',"$tools/lib/d8.jar",'com.android.tools.r8.D8','--min-api','26','--lib',$platform,'--output',"$stage/dex", "$stage/classes.jar") + $relayJars)
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::Open("$stage/resources.apk",[IO.Compression.ZipArchiveMode]::Update)
 try {

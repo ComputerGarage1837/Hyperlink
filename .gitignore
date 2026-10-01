@@ -12,3 +12,10 @@
 *.jks
 *.keystore
 /vendor/ffmpeg/
+__pycache__/
+*.pyc
+*.dpapi
+/relay/data/
+/relay/enrollment.key
+/relay/*.log
+/relay/*.pid
