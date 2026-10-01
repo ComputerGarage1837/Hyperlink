@@ -87,6 +87,13 @@ namespace Hyperlink
                     lock (owner.Sync) owner.Data.Peers[0].Audio = false;
                     Thread.Sleep(120); stoppedFrames = Volatile.Read(ref audioFrames); Thread.Sleep(120); Check(Volatile.Read(ref audioFrames) == stoppedFrames, "Revoked audio continued streaming.");
                     Denied(delegate { client.Call("recording-start"); }, "Recording started without its separate permission.");
+                    Denied(delegate { client.Call("privacy-start"); }, "Privacy started without its separate permission.");
+                    lock (owner.Sync) owner.Data.Peers[0].Privacy = true;
+                    var privacy = client.Call("privacy-start");
+                    Check(Wire.Number(privacy, "timeoutSeconds") == 1800, "Privacy safety timeout was not negotiated.");
+                    client.Call("privacy-stop");
+                    Wait(delegate { return Volatile.Read(ref hostNotice).StartsWith("Privacy mode stopped", StringComparison.Ordinal); });
+                    lock (owner.Sync) owner.Data.Peers[0].Privacy = false;
                     lock (owner.Sync) owner.Data.Peers[0].Recording = true;
                     using (var recorder = new JpegRecording(Path.Combine(folder, "network-recording.mkv"), remote.Width, remote.Height))
                     {
@@ -103,6 +110,19 @@ namespace Hyperlink
                     client.Call("recording-start"); lock (owner.Sync) owner.Data.Peers[0].Recording = false;
                     Wait(delegate { return Volatile.Read(ref ended) != 0; });
                     Check(!remote.Connected, "Revoked recording permission left the session active.");
+                }
+                using (var privateRemote = new Remote(viewer))
+                {
+                    privateRemote.Frame = delegate(System.Drawing.Bitmap image) { image.Dispose(); };
+                    int privacyEnded = 0; privateRemote.Ended += delegate { Interlocked.Exchange(ref privacyEnded, 1); };
+                    lock (owner.Sync) owner.Data.Peers[0].Privacy = true;
+                    privateRemote.Connect(device);
+                    using (var client = new ExtensionClient(privateRemote))
+                    {
+                        client.Call("privacy-start"); lock (owner.Sync) owner.Data.Peers[0].Privacy = false;
+                        Wait(delegate { return Volatile.Read(ref privacyEnded) != 0; });
+                        Check(!privateRemote.Connected, "Revoked privacy permission left the session active.");
+                    }
                 }
             }
             return checks;

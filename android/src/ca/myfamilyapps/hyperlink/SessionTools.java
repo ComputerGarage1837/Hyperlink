@@ -33,6 +33,7 @@ final class SessionTools implements AutoCloseable {
     private boolean busy, picking;
     private String downloadName;
     private volatile SessionAudio audio;
+    private volatile boolean privacy;
     SessionTools(Activity activity,Remote remote){
         this.activity=activity;this.remote=remote;
         dialog=new Dialog(activity);dialog.setTitle("Session tools");
@@ -47,6 +48,8 @@ final class SessionTools implements AutoCloseable {
         button("Copy box to Android clipboard",() -> {String value=text.getText().toString();try{checkText(value);ClipboardManager clipboard=(ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);clipboard.setPrimaryClip(ClipData.newPlainText("Hyperlink",value));postStatus("Copied to Android clipboard");}catch(Exception e){postStatus("Could not copy text");}});
         button("Start host playback audio",() -> run(this::startAudio));
         button("Stop audio",() -> run(this::stopAudio));
+        button("Hide host displays",() -> new AlertDialog.Builder(activity).setTitle("Local display privacy").setMessage("Requires the owner's separate permission. The local owner can press Ctrl+Alt+Shift+H to restore the displays and disconnect. Privacy stops after 30 minutes or when session tools close.").setPositiveButton("Start",(d,w) -> run(() -> {if(privacy)throw new IOException("Privacy is already active");remote.extension("privacy-start");privacy=true;if(closed){remote.extension("privacy-stop");privacy=false;}else postStatus("Host display privacy is active");})).setNegativeButton("Cancel",null).show());
+        button("Restore host displays",() -> run(() -> {remote.extension("privacy-stop");privacy=false;postStatus("Host displays restored");}));
         Button cancel=new Button(activity);cancel.setText("Cancel file operation");cancel.setOnClickListener(v -> {cancelled.set(true);postStatus("Cancelling; already committed files remain saved.");});body.addView(cancel);
         Button close=new Button(activity);close.setText("Close tools");close.setOnClickListener(v -> dialog.dismiss());body.addView(close);
         dialog.setContentView(scroll);dialog.setOnDismissListener(ignored -> close());
@@ -178,7 +181,7 @@ final class SessionTools implements AutoCloseable {
     public void close(){
         if(closed)return;closed=true;cancelled.set(true);remote.audioSink=null;SessionAudio player=audio;audio=null;if(player!=null)player.close();
         // Queue cleanup after any active transfer; never block Android's UI thread.
-        try{worker.execute(() -> {try{remote.extension("audio-stop");}catch(Exception ignored){remote.close();}cancelHost();});}catch(RejectedExecutionException ignored){remote.close();}worker.shutdown();
+        try{worker.execute(() -> {try{if(privacy){remote.extension("privacy-stop");privacy=false;}remote.extension("audio-stop");}catch(Exception ignored){remote.close();}cancelHost();});}catch(RejectedExecutionException ignored){remote.close();}worker.shutdown();
         if(dialog.isShowing())dialog.dismiss();
     }
 }

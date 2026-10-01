@@ -92,7 +92,7 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
         main.post(() -> {Bitmap next; synchronized(frames){next=pending;pending=null;presentationQueued=false;}
             if(next!=null){if(stopped)next.recycle();else screen.present(next);}});
     }
-    public void ended(String reason) {main.post(() -> {if(stopped)return;control=false;enableControls(false);status.setText(reason);});}
+    public void ended(String reason) {main.post(() -> {if(stopped)return;control=false;if(tools!=null){tools.close();tools=null;}enableControls(false);status.setText(reason);});}
     @Override protected void onStop() {super.onStop();
         if(tools!=null && tools.isPicking() && !isFinishing()){
             selectingDocument=true;if(remote!=null)remote.release();

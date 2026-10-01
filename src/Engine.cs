@@ -25,7 +25,7 @@ namespace Hyperlink
         public string Id, Name, PublicKey;
         public bool Control;
         public bool FileRead, FileWrite, ClipboardToHost, ClipboardFromHost;
-        public bool Audio, Recording;
+        public bool Audio, Recording, Privacy;
     }
     public sealed class Device
     {
@@ -521,6 +521,7 @@ namespace Hyperlink
                         {
                             lock (gate) if (active != sessionWire || listener != server) break;
                             var timer = Stopwatch.StartNew();
+                            var privateSession = extensions; if (privateSession != null && privateSession.PrivacyActive) lock (store.Sync) { if (!store.Data.Peers.Any(p => p.Id == id && p.Privacy)) throw new UnauthorizedAccessException("Privacy permission ended."); }
                             var recordingSession = extensions; if (recordingSession != null && recordingSession.Recording) lock (store.Sync) { if (!store.Data.Peers.Any(p => p.Id == id && p.Recording)) throw new UnauthorizedAccessException("Recording permission ended."); }
                             byte[] frame = capture.Frame();
                             lock (gate) if (active != sessionWire || listener != server) break;
@@ -555,13 +556,15 @@ namespace Hyperlink
                                         wire.Send(11, packet); return true;
                                     }
                                 });
-                                result = extensions.Handle(message); ok = true;
+                                extensions.EndSession = delegate { wire.Dispose(); }; result = extensions.Handle(message); ok = true;
                             }
-                            catch (Exception) { if (extensions != null && extensions.Recording) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { } extensions = null; }
+                            catch (Exception) { if (extensions != null && (extensions.Recording || extensions.PrivacyActive)) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { } extensions = null; }
                             wire.SendJson(new { kind = "extension", request = request, ok = ok, result = result });
                             if (ok && extensionOperation == "audio-start") extensions.StartAudio();
                         if (ok && extensionOperation == "recording-start") status("RECORDING: this viewer is saving the session.");
                         if (ok && extensionOperation == "recording-stop") status("Recording stopped; the viewer is still connected.");
+                        if (ok && extensionOperation == "privacy-start") status((extensions.Recording ? "RECORDING · " : "") + "Privacy mode active; Ctrl+Alt+Shift+H restores the display and disconnects.");
+                        if (ok && extensionOperation == "privacy-stop") status(extensions.Recording ? "RECORDING: privacy stopped; the viewer is saving the session." : "Privacy mode stopped; the viewer is still connected.");
                         }
                         continue;
                     }
@@ -582,7 +585,7 @@ namespace Hyperlink
             }
             finally
             {
-                if (extensions != null && extensions.Recording) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { }
+                if (extensions != null && (extensions.Recording || extensions.PrivacyActive)) wire.Dispose(); if (extensions != null) try { extensions.Dispose(); } catch { }
                 if (wire != null) wire.Dispose(); else client.Close();
                 lock (gate)
                 {
