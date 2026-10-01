@@ -106,6 +106,19 @@ namespace Hyperlink
                         remote.EncodedFrame -= capture; recorder.Stop(); recorder.Completion.GetAwaiter().GetResult();
                         client.Call("recording-stop");
                         Check(File.Exists(Path.Combine(folder, "network-recording.mkv")), "Encrypted session recording was not saved.");
+                        client.Call("audio-stop"); lock (owner.Sync) owner.Data.Peers[0].Audio = true;
+                        var recordingAudio = client.Call("audio-start");
+                        using (var soundRecorder = new JpegRecording(Path.Combine(folder, "network-audio-recording.mkv"), remote.Width, remote.Height, recordingAudio))
+                        {
+                            int soundFrames = 0, videoFrames = 0;
+                            Action<byte[]> sound = delegate(byte[] packet) { soundRecorder.AcceptAudio(packet); Interlocked.Increment(ref soundFrames); };
+                            Action<byte[]> video = delegate(byte[] jpeg) { soundRecorder.Accept(jpeg); Interlocked.Increment(ref videoFrames); };
+                            client.Call("recording-start"); remote.AudioFrame += sound; remote.EncodedFrame += video;
+                            try { Wait(delegate { return Volatile.Read(ref soundFrames) >= 3 && Volatile.Read(ref videoFrames) >= 3; }); }
+                            finally { remote.AudioFrame -= sound; remote.EncodedFrame -= video; soundRecorder.Stop(); }
+                            soundRecorder.Completion.GetAwaiter().GetResult(); client.Call("recording-stop"); client.Call("audio-stop");
+                            Check(File.Exists(Path.Combine(folder, "network-audio-recording.mkv")), "Encrypted video-and-audio recording was not saved.");
+                        }
                         Wait(delegate { return Volatile.Read(ref hostNotice).StartsWith("Recording stopped", StringComparison.Ordinal); });
                     }
                     int ended = 0; remote.Ended += delegate { Interlocked.Exchange(ref ended, 1); };
