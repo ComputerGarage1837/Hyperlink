@@ -18,6 +18,9 @@ public final class MainActivity extends Activity {
     private EditText username, password, code;
     private CheckBox trust, remember;
     private boolean busy;
+    private long lastInteraction=android.os.SystemClock.elapsedRealtime();
+    @Override public void onUserInteraction(){super.onUserInteraction();lastInteraction=android.os.SystemClock.elapsedRealtime();}
+    boolean idleForUpdate(){return identity!=null&&!busy&&hasWindowFocus()&&ViewerActivity.openViewers==0&&android.os.SystemClock.elapsedRealtime()-lastInteraction>=30000;}
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     interface Job { void run() throws Exception; }
     public void onCreate(Bundle saved) {

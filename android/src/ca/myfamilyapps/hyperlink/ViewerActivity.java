@@ -27,7 +27,7 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
     private long received;
 
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved);
+        super.onCreate(saved);openViewers++;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         LinearLayout root = MainActivity.root(this);
         status = new TextView(this); status.setTextColor(Color.WHITE);
@@ -104,7 +104,8 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
         super.onActivityResult(request,result,data);selectingDocument=false;
         if(tools!=null && (request==SessionTools.UPLOAD || request==SessionTools.DOWNLOAD_FOLDER))tools.picked(request,result,data);
     }
-    @Override protected void onDestroy(){if(tools!=null)tools.close();if(remote!=null)remote.close();super.onDestroy();}
+    static int openViewers;
+    @Override protected void onDestroy(){openViewers--;if(tools!=null)tools.close();if(remote!=null)remote.close();super.onDestroy();}
 
     private final class Screen extends View {
         private Bitmap bitmap;

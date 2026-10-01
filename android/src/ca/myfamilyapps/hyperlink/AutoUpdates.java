@@ -16,10 +16,20 @@ import java.util.concurrent.*;
 final class AutoUpdates {
     private final Activity owner;private final Button install;private final TextView message;private final SharedPreferences prefs;
     private final ExecutorService worker=Executors.newSingleThreadExecutor();private volatile boolean closed;private boolean checking;private AutoUpdateFeed ready;private boolean requested;
+    private final android.os.Handler timer=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable automatic=new Runnable(){public void run(){
+        if(closed)return;
+        if(ready!=null&&Build.VERSION.SDK_INT>=31&&owner.getPackageManager().canRequestPackageInstalls()
+            &&((MainActivity)owner).idleForUpdate()&&prefs.getInt("attemptedCode",0)!=ready.code){
+            prefs.edit().putInt("attemptedCode",ready.code).apply();install();
+        }
+        timer.postDelayed(this,30000);
+    }};
     AutoUpdates(Activity activity,LinearLayout body) {
         owner=activity;prefs=owner.getSharedPreferences("updates",Context.MODE_PRIVATE);
         message=MainActivity.label(body,"",14,0xffa9bbcd);message.setVisibility(View.GONE);
         install=MainActivity.button(body,"Install downloaded update",this::install);install.setVisibility(View.GONE);
+        timer.postDelayed(automatic,30000);
     }
     void check() {
         if(closed||checking)return;
@@ -41,7 +51,7 @@ final class AutoUpdates {
                         if(apk.exists()&&!apk.delete())throw new IOException("Could not replace cached update");if(!temporary.renameTo(apk))throw new IOException("Could not save update");
                     }finally{temporary.delete();}
                 }
-                final AutoUpdateFeed downloaded=feed;ui(()->{ready=downloaded;message.setText("Hyperlink "+downloaded.version+" downloaded. Android will ask you to approve installation.");message.setVisibility(View.VISIBLE);install.setVisibility(View.VISIBLE);});
+                final AutoUpdateFeed downloaded=feed;ui(()->{ready=downloaded;message.setText("Hyperlink "+downloaded.version+" downloaded. Installation is automatic when supported and idle. Tap Install if permission or approval is needed.");message.setVisibility(View.VISIBLE);install.setVisibility(View.VISIBLE);});
             }catch(Exception ignored){}finally{ui(()->checking=false);}
         });
     }
@@ -65,6 +75,7 @@ final class AutoUpdates {
             try {
                 if(!valid(file(),selected))throw new IOException("Update no longer valid");
                 PackageInstaller.SessionParams parameters=new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);parameters.setAppPackageName(owner.getPackageName());parameters.setSize(selected.size);
+                if(Build.VERSION.SDK_INT>=31)parameters.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
                 id=installer.createSession(parameters);
                 try(PackageInstaller.Session session=installer.openSession(id)) {
                     try(InputStream input=new FileInputStream(file());OutputStream output=session.openWrite("base.apk",0,selected.size)) {byte[] buffer=new byte[32768];int count;while((count=input.read(buffer))>0)output.write(buffer,0,count);session.fsync(output);}
@@ -83,5 +94,5 @@ final class AutoUpdates {
         }finally{connection.disconnect();}
     }
     private void ui(Runnable task){owner.runOnUiThread(()->{if(!closed&&!owner.isFinishing()&&!owner.isDestroyed())task.run();});}
-    void close(){closed=true;worker.shutdownNow();}
+    void close(){closed=true;timer.removeCallbacks(automatic);worker.shutdownNow();}
 }

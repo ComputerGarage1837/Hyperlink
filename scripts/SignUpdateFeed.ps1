@@ -5,15 +5,17 @@ param(
     [Parameter(Mandatory=$true)][string]$Version,
     [Parameter(Mandatory=$true)][int]$Sequence,
     [Parameter(Mandatory=$true)][int]$AndroidCode,
+    [string]$AndroidVersion,
     [Parameter(Mandatory=$true)][string]$Output
 )
 $ErrorActionPreference='Stop'
+if($AndroidVersion -and $AndroidVersion -notmatch '^\d{1,5}(\.\d{1,5}){2,3}$'){throw 'Invalid Android version'}
 if($Version -notmatch '^\d{1,5}(\.\d{1,5}){2,3}$' -or $Sequence -lt 1 -or $AndroidCode -lt 1){throw 'Invalid release identifiers'}
 Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $windows=Get-Item -LiteralPath $WindowsPackage; $android=Get-Item -LiteralPath $AndroidPackage
 if($windows.Length -gt 32MB -or $android.Length -gt 32MB){throw 'Release exceeds update size limit'}
-$manifest=[ordered]@{product='Hyperlink';version=$Version;sequence=$Sequence;expires=[DateTime]::UtcNow.AddDays(365).ToString('o');windowsSha256=(Get-FileHash -LiteralPath $windows.FullName -Algorithm SHA256).Hash.ToLowerInvariant();windowsSize=$windows.Length;androidSha256=(Get-FileHash -LiteralPath $android.FullName -Algorithm SHA256).Hash.ToLowerInvariant();androidSize=$android.Length;androidCode=$AndroidCode}
+$manifest=[ordered]@{product='Hyperlink';version=$Version;sequence=$Sequence;expires=[DateTime]::UtcNow.AddDays(365).ToString('o');windowsSha256=(Get-FileHash -LiteralPath $windows.FullName -Algorithm SHA256).Hash.ToLowerInvariant();windowsSize=$windows.Length;androidSha256=(Get-FileHash -LiteralPath $android.FullName -Algorithm SHA256).Hash.ToLowerInvariant();androidSize=$android.Length;androidCode=$AndroidCode;androidVersion=$(if($AndroidVersion){$AndroidVersion}else{$Version})}
 $payload=[Text.Encoding]::UTF8.GetBytes(($manifest|ConvertTo-Json -Compress))
 $clear=[Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $KeyPath).Path),$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)
 $key=New-Object Security.Cryptography.RSACryptoServiceProvider

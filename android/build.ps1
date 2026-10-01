@@ -17,7 +17,7 @@ function Run([string]$Tool,[string[]]$Arguments) {
     if($LASTEXITCODE -ne 0) { throw "$Tool failed ($LASTEXITCODE)" }
 }
 Run "$tools/aapt2.exe" @('compile','--dir',"$PSScriptRoot/res",'-o',"$stage/resources.zip")
-Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','14','--version-name','0.6.2','--min-sdk-version','26','--target-sdk-version','36','-A',"$PSScriptRoot/assets","$stage/resources.zip")
+Run "$tools/aapt2.exe" @('link','-o',"$stage/resources.apk",'--manifest',"$PSScriptRoot/AndroidManifest.xml",'-I',$platform,'--version-code','15','--version-name','0.6.3','--min-sdk-version','26','--target-sdk-version','36','-A',"$PSScriptRoot/assets","$stage/resources.zip")
 . "$PSScriptRoot/../scripts/RelayDependencies.ps1"
 $relayJars=@(Get-HyperlinkRelayDependencies)
 $compileClasspath=$platform+";"+($relayJars -join ";")
