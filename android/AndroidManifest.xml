@@ -1,6 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ca.myfamilyapps.hyperlink">
   <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
   <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
   <application android:label="Hyperlink" android:icon="@drawable/icon" android:theme="@style/HyperlinkTheme"
       android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
     <activity android:name=".MainActivity" android:exported="true">
@@ -8,5 +9,6 @@
     </activity>
     <activity android:name=".ViewerActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" />
     <activity android:name=".RecordingsActivity" android:exported="false" />
+    <receiver android:name=".UpdateInstallReceiver" android:exported="false" />
   </application>
 </manifest>

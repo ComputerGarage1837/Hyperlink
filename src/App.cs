@@ -237,8 +237,8 @@ namespace Hyperlink
 
     sealed partial class MainWindow : Form
     {
-        internal bool CanInstallAutomatically { get { return Application.OpenForms.Count == 1 && !host.SessionActive; } }
-        internal bool InstallAutomatically(string job) { if (!CanInstallAutomatically || !host.BeginAutomaticUpdate(delegate { UpdateCoordinator.Start(job); })) return false; Close(); return true; }
+        internal bool CanInstallAutomatically { get { return Enabled && !ContainsFocus && Application.OpenForms.Count == 1 && !host.UpdateBusy && !content.Controls.OfType<UnattendedPanel>().Any(panel => panel.SavingPin); } }
+        internal bool InstallAutomatically(string job) { if (!CanInstallAutomatically || !host.BeginAutomaticUpdate(delegate { UpdateCoordinator.Start(job); })) return false; exiting = true; Close(); return true; }
         readonly Store store;
         readonly Host host;
         readonly AccountClient account;
@@ -261,7 +261,7 @@ namespace Hyperlink
             { string target = name; var b = Theme.Button(name); b.Width = 238; b.Height = 48; b.TextAlign = ContentAlignment.MiddleLeft; b.Padding = new Padding(12, 0, 0, 0); b.Margin = new Padding(0, 0, 0, 10); b.Click += delegate { page = target; Render(); }; navigation.Add(name, b); nav.Controls.Add(b); }
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
             var identity = Theme.Label("LOCAL IDENTITY\n" + store.Data.Name + "\n\nWindows-protected\nlocal identity", 9, Theme.Muted); identity.Dock = DockStyle.Fill; bottom.Controls.Add(identity);
-            var version = Theme.Label("v0.6.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
+            var version = Theme.Label("v0.6.2   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
             sidebar.Controls.Add(nav); sidebar.Controls.Add(bottom); sidebar.Controls.Add(new Brand());
             var shell = new Panel { Dock = DockStyle.Fill, Padding = new Padding(30, 22, 30, 18) };
             content = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -428,7 +428,7 @@ namespace Hyperlink
         }
         void About()
         {
-            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.6.0\r\n\r\nUnattended access while Windows is signed in.\r\n\r\nChoose a PIN on this computer. Connect from Android using the eight-digit computer ID and PIN. Your private relay is hyperlink.myfamilyapps.ca. No family account login is needed.\r\n\r\nAccess lets the owner grant or revoke control, files, clipboard, audio, recording and privacy. PINs stay on Windows; relay traffic uses end-to-end pinned TLS.\r\n\r\nStill pending: Windows service for login/UAC and restart, printer redirection, production native-video integration and physical-device performance qualification.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; var updateLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; updateLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); updateLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56)); var updateButton = Theme.Button("Install verified local update", true); updateButton.Dock = DockStyle.Fill; updateButton.Click += delegate { using (var window = new UpdateWindow(this, store)) window.ShowDialog(this); }; updateLayout.Controls.Add(text, 0, 0); updateLayout.Controls.Add(updateButton, 0, 1); card.Controls.Add(updateLayout); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
+            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.6.2\r\n\r\nUnattended access while Windows is signed in.\r\n\r\nChoose a PIN on this computer. Connect from Android using the eight-digit computer ID and PIN. Your private relay is hyperlink.myfamilyapps.ca. No family account login is needed.\r\n\r\nAccess lets the owner grant or revoke control, files, clipboard, audio, recording and privacy. PINs stay on Windows; relay traffic uses end-to-end pinned TLS.\r\n\r\nStill pending: Windows service for login/UAC and restart, printer redirection, production native-video integration and physical-device performance qualification.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; var updateLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 }; updateLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); updateLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 56)); var updateButton = Theme.Button("Install verified local update", true); updateButton.Dock = DockStyle.Fill; updateButton.Click += delegate { using (var window = new UpdateWindow(this, store)) window.ShowDialog(this); }; updateLayout.Controls.Add(text, 0, 0); updateLayout.Controls.Add(updateButton, 0, 1); card.Controls.Add(updateLayout); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
         }
     }
 

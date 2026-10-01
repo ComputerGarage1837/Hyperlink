@@ -200,13 +200,13 @@ namespace Hyperlink
             Text = "Verified updates"; Size = new System.Drawing.Size(620, 410); Font = Theme.Font(10); StartPosition = FormStartPosition.CenterParent;
             var body = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 5 };
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); for (int row = 0; row < 3; row++) body.RowStyles.Add(new RowStyle(SizeType.Absolute, 44)); body.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); Controls.Add(body);
-            status = new Label { Dock = DockStyle.Fill, Text = "Choose a .hup package signed by Hyperlink's offline release key. The installer verifies every public file, preserves Data, and retains a recovery backup. Internet update downloads are not active yet." };
+            status = new Label { Dock = DockStyle.Fill, Text = "Choose a .hup package signed by Hyperlink's offline release key. The installer verifies every public file, preserves Data, and retains a recovery backup. Automatic downloads are available from your private release feed. Windows installs when the app and sessions are idle." };
             choose = new Button { Text = "Choose update package", Dock = DockStyle.Fill }; install = new Button { Text = "Install verified update and restart", Dock = DockStyle.Fill, Enabled = false };
             online = new Button { Text = "Check release feed", Dock = DockStyle.Fill };
             body.Controls.Add(status, 0, 0); body.Controls.Add(choose, 0, 1); body.Controls.Add(online, 0, 2); body.Controls.Add(install, 0, 3);
             var preferences = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false };
-            var check = new CheckBox { Text = "Check for signed updates each day (internet)", AutoSize = true };
-            var automatic = new CheckBox { Text = "Install automatically when no session is active", AutoSize = true };
+            var check = new CheckBox { Text = "Check for signed updates every six hours", AutoSize = true };
+            var automatic = new CheckBox { Text = "Install automatically when the app and sessions are idle", AutoSize = true };
             lock (store.Sync) { check.Checked = store.Data.AutoCheckUpdates; automatic.Checked = store.Data.AutoInstallUpdates; } automatic.Enabled = check.Checked;
             preferences.Controls.Add(check); preferences.Controls.Add(automatic); body.Controls.Add(preferences, 0, 4);
             bool saving = false;

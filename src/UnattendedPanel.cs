@@ -12,6 +12,7 @@ namespace Hyperlink
         readonly Store store; readonly Host host; readonly Action startRelay, stopRelay; readonly Func<bool> online;
         readonly TextBox pin, confirm; readonly CheckBox startup; readonly Label computer, status;
         readonly Button enable, disable; readonly Timer refresh; bool busy;
+        internal bool SavingPin { get { return busy; } }
         internal UnattendedPanel(Store state, Host desktop, Action start, Action stop, Func<bool> connected)
         {
             store = state; host = desktop; startRelay = start; stopRelay = stop; online = connected;

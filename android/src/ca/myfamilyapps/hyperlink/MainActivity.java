@@ -11,6 +11,7 @@ import java.util.concurrent.*;
 import org.json.*;
 
 public final class MainActivity extends Activity {
+    private AutoUpdates updates;
     static final int BACKGROUND = Color.rgb(17,25,37), TEXT = Color.rgb(228,236,247), MINT = Color.rgb(109,231,205);
     private Identity identity; private Api api;
     private TextView status; private LinearLayout peers, family;
@@ -24,6 +25,7 @@ public final class MainActivity extends Activity {
         LinearLayout root = root(this); ScrollView scroll = new ScrollView(this); LinearLayout body = column(this);
         scroll.addView(body); root.addView(scroll, new LinearLayout.LayoutParams(-1,-1)); setContentView(root);
         label(body,"Hyperlink",32,MINT); label(body,"Private family remote desktop",16,TEXT);
+        updates=new AutoUpdates(this,body);
         status = label(body,"Preparing your protected viewer identity…",14,TEXT);
         label(body,"Connect to a computer",22,TEXT);
         label(body,"On Windows, open Unattended access, choose a PIN, and use the computer ID shown there.",14,TEXT);
@@ -179,5 +181,6 @@ public final class MainActivity extends Activity {
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Continue",(d,w)->next.run()).create();
         dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE); dialog.show();
     }
-    protected void onDestroy(){worker.shutdownNow();super.onDestroy();}
+    protected void onResume(){super.onResume();if(updates!=null)updates.check();}
+    protected void onDestroy(){if(updates!=null)updates.close();worker.shutdownNow();super.onDestroy();}
 }

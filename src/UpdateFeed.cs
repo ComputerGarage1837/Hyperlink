@@ -61,25 +61,27 @@ namespace Hyperlink
         internal static void Attach(MainWindow owner, Store store)
         {
             var cancel = new CancellationTokenSource(); var timer = new System.Windows.Forms.Timer { Interval = 60000 };
-            bool busy = false; DateTime next = DateTime.MinValue;
+            bool busy = false; string pending = null; DateTime next = DateTime.MinValue;
             timer.Tick += async delegate
             {
                 bool enabled; lock (store.Sync) enabled = store.Data.AutoCheckUpdates;
-                if (!enabled || busy || DateTime.UtcNow < next || owner.IsDisposed) return;
-                busy = true; next = DateTime.UtcNow.AddHours(24);
+                if (!enabled || busy || owner.IsDisposed) return;
+                if (pending != null) { try { bool automatic; lock (store.Sync) automatic = store.Data.AutoInstallUpdates; if (!automatic) { pending = null; next = DateTime.MinValue; } else if (owner.CanInstallAutomatically && owner.InstallAutomatically(pending)) pending = null; } catch { pending = null; next = DateTime.UtcNow.AddMinutes(15); } return; }
+                if (DateTime.UtcNow < next) return;
+                busy = true; next = DateTime.UtcNow.AddHours(6);
                 try
                 {
                     var release = await Task.Run(() => Latest(cancel.Token)); if (release == null || owner.IsDisposed) return;
                     bool automatic; lock (store.Sync) automatic = store.Data.AutoInstallUpdates;
-                    if (automatic && owner.CanInstallAutomatically)
+                    if (automatic)
                     {
                         string job = await Task.Run(() => PrepareLatest(cancel.Token));
-                        if (job != null && !owner.IsDisposed) owner.InstallAutomatically(job);
+                        if (job != null && !owner.IsDisposed) { pending = job; if (owner.CanInstallAutomatically && owner.InstallAutomatically(job)) pending = null; }
                     }
                     else if (Application.OpenForms.Count == 1 && MessageBox.Show(owner, "A signed Hyperlink update is available. Open the update screen?", "Hyperlink update", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                         using (var window = new UpdateWindow(owner, store)) window.ShowDialog(owner);
                 }
-                catch { /* Keep automatic checks quiet while the feed is unavailable. Manual checks report errors. */ }
+                catch { pending = null; next = DateTime.UtcNow.AddMinutes(15); /* Retry quietly after transient download errors. */ }
                 finally { busy = false; }
             };
             owner.Shown += delegate { timer.Start(); };

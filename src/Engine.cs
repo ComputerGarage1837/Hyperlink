@@ -43,7 +43,7 @@ namespace Hyperlink
         public string FamilyDeviceId;
         public int Port = 45831;
         public string SharedFolder;
-        public bool AutoCheckUpdates, AutoInstallUpdates;
+        public bool AutoCheckUpdates = true, AutoInstallUpdates = true;
         public bool Unattended;
         public string PinSalt, PinHash;
         public string RelayOwnerToken, RelayComputerCode;
@@ -400,7 +400,8 @@ namespace Hyperlink
     public sealed partial class Host : IDisposable
     {
         public bool SessionActive { get { lock (gate) return active != null; } }
-        public bool BeginAutomaticUpdate(Action start) { lock (gate) { if (active != null) return false; start(); Stop(); return true; } }
+        internal bool UpdateBusy { get { lock (gate) return active != null || workers > 0; } }
+        public bool BeginAutomaticUpdate(Action start) { lock (gate) { if (active != null || workers > 0) return false; start(); Stop(); return true; } }
         readonly Store store;
         readonly Func<string, bool, int> approve;
         readonly Action<string> status;

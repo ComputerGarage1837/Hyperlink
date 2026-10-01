@@ -8,8 +8,11 @@ $sources=@("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/Signing.java","$PSScript
 $sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/ReplyInbox.java","$PSScriptRoot/tests/ReplyInboxCheck.java")
 $sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/WakePacket.java","$PSScriptRoot/tests/WakePacketCheck.java")
 $sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/MjpegRecording.java","$PSScriptRoot/tests/RecordingCheck.java")
+$sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/UpdateSignatures.java","$PSScriptRoot/src/ca/myfamilyapps/hyperlink/UpdateReleaseKey.java","$PSScriptRoot/tests/UpdateSignatureCheck.java")
 & "$Jdk/bin/javac.exe" --release 8 -Xlint:-options -d $root @sources
 if($LASTEXITCODE -ne 0){throw 'Java tests did not compile'}
+& "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.UpdateSignatureCheck "$PSScriptRoot/tests/update-feed-fixture.json"
+if ($LASTEXITCODE -ne 0) { throw "Android update signature checks failed" }
 & "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.SigningCheck "$root/android-proof.json"
 if($LASTEXITCODE -ne 0){throw 'Android signing checks failed'}
 & "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.ReplyInboxCheck

@@ -1,4 +1,4 @@
-# Hyperlink 0.6.0
+# Hyperlink 0.6.2
 
 Private family remote desktop for Windows and Android. This is a development draft.
 
@@ -22,4 +22,9 @@ Relay: Python 3.11; install `relay/requirements.txt`, then `python relay/test_re
 
 Dependencies are version/digest pinned. Keep all enrollment, provisioning and signing secrets outside public artifacts and source control. Java-WebSocket and SLF4J licenses are included in Android APK assets.
 
-0.6.0 passed Windows focused checks, existing Android/Windows encrypted protocol checks, relay ownership/replay/cleanup checks, and a public-domain test of Windows and Android's Java relay/TLS code pairing by PIN, reconnecting and receiving a synthetic JPEG. Physical-phone UI, gestures, rotation and audio still need device testing. These checks do not qualify Windows login/UAC or native-video performance.
+0.6.2 passed Windows focused checks, existing Android/Windows encrypted protocol checks, relay ownership/replay/cleanup checks, and a public-domain test of Windows and Android's Java relay/TLS code pairing by PIN, reconnecting and receiving a synthetic JPEG. Physical-phone UI, gestures, rotation and audio still need device testing. These checks do not qualify Windows login/UAC or native-video performance.
+Automatic updates are enabled by default. Windows checks the signed personal release feed every six hours, downloads in the background, and installs when the window, dialogs, pending pairing and remote sessions are idle. Tray hosting exits for replacement and returns through the normal signed update recovery path. Temporary failures retry after fifteen minutes; settings and device identity remain local.
+
+Android checks when opened or resumed, downloads a verified APK automatically, and shows Install downloaded update. The app verifies the signed release feed, APK hash, version and existing app signing certificate. Android requires installation approval and may ask once to allow Hyperlink to install apps. No website download is needed after this updater-enabled APK is installed. Physical phone installation still needs device verification.
+
+For releases, build and sign the Windows HUP and Android APK, then run scripts/SignUpdateFeed.ps1 with the offline release key. Publish the generated APK and versioned HUP first, and updates.json plus releases/windows/stable.json last. Keep signing keys off the host and out of GitHub.
