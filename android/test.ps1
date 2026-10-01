@@ -5,14 +5,20 @@ $Output=[IO.Path]::GetFullPath($Output)
 $root=Join-Path $Output ([Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 $sources=@("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/Signing.java","$PSScriptRoot/src/ca/myfamilyapps/hyperlink/PinnedWire.java","$PSScriptRoot/tests/SigningCheck.java","$PSScriptRoot/tests/WireCheck.java")
+$sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/ReplyInbox.java","$PSScriptRoot/tests/ReplyInboxCheck.java")
 & "$Jdk/bin/javac.exe" --release 8 -Xlint:-options -d $root @sources
 if($LASTEXITCODE -ne 0){throw 'Java tests did not compile'}
 & "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.SigningCheck "$root/android-proof.json"
 if($LASTEXITCODE -ne 0){throw 'Android signing checks failed'}
+& "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.ReplyInboxCheck
+if($LASTEXITCODE -ne 0){throw 'Android session request checks failed'}
+. "$PSScriptRoot/../scripts/AudioDependencies.ps1"
+$audioReferences=@(Get-HyperlinkAudioReferences)
+Copy-HyperlinkAudioRuntime $root
 $native=@(Get-ChildItem "$PSScriptRoot/../src" -Filter *.cs | ForEach-Object {$_.FullName})
 $native+=(Resolve-Path -LiteralPath "$PSScriptRoot/tests/InteropHost.cs").Path
 $fixture=Join-Path $root 'InteropHost.exe'
-& "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo /target:exe /main:Hyperlink.InteropHost "/out:$fixture" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll @native
+& "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo /target:exe /main:Hyperlink.InteropHost "/out:$fixture" /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Web.Extensions.dll @audioReferences @native
 if($LASTEXITCODE -ne 0){throw 'Windows interoperability fixture did not compile'}
 $hostProcess=Start-Process -FilePath $fixture -ArgumentList ('"'+$root+'"') -WindowStyle Hidden -PassThru
 try{

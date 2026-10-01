@@ -1,6 +1,6 @@
 # Hyperlink
 
-Private family remote desktop for Windows and Android. Current version: **0.3.0 development draft**. The owner authorized replacing the original prototype.
+Private family remote desktop for Windows and Android. Current version: **0.4.0 development draft**. The owner authorized replacing the original prototype.
 
 0.3 adds a native Android attended viewer and Unicode keyboard input on Windows. The APK builds and its personal signature verifies. The shipped Java TLS/RSA implementation passes synthetic Windows host interoperability checks, including rejection of a wrong certificate pin and malicious read-only text input. Android-generated DPoP proofs pass the PHP controller's checks. Android launch, Keystore persistence, gestures and rotation remain unverified: the local software emulator has not booted. See [Android build and test instructions](android/README.md).
 
@@ -27,3 +27,9 @@ The Windows self-test covers real loopback authentication, pairing replay, certi
 The PHP suite tests account isolation, MFA/request replay, key-bound login/refresh, explicit viewer trust, independent revocation, scoped tickets, expired leases, recovery, rate limits, host-key binding and administrator boundaries. The HTTP suite exercises the real API entry point. A native Windows RSA proof has also been verified by the PHP JWT library.
 
 The high-performance engine, private relay, Windows service/UAC/reboot lifecycle, Android viewer, clipboard/files/audio, display compatibility and update chain remain unfinished. These checks do not qualify 120 fps or unattended operation. See [docs/ROADMAP.md](docs/ROADMAP.md).
+
+### Windows session tools (0.4 development checkpoint)
+
+Paired viewers can use file transfer, directional plain-text clipboard exchange, and system playback audio when the computer owner explicitly grants each permission. Open Access > Permissions and shared folder on the host, then Session tools in the viewer. File transfer uses an owner-selected local folder, validates SHA-256, publishes complete files atomically, and never overwrites existing files. The draft limits individual files to 1 GiB and text to 1,024 characters. Clipboard exchange is manual; there is no initial synchronization. Audio uses the default playback device, never a microphone or camera.
+
+The Windows package now includes NAudio.Core.dll, NAudio.Wasapi.dll, and their MIT license notice. Keep these beside Hyperlink.exe. Automated checks cover encrypted transfers, cancellation, independent permissions, directional clipboard exchange, and synthetic audio with live revocation. Real audio streaming and playback still require end-to-end verification. Android session tools are included in the signed 0.4 APK, with encrypted Java/Windows file, clipboard, and synthetic-audio protocol checks. Android document-picker, lifecycle, and actual playback testing remain unverified. Unattended access, hardware encoding, live family account session authorization, internet relay, and authenticated automatic updates remain unfinished. The default draft stream remains capped at 30 FPS.

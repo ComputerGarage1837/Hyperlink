@@ -24,6 +24,17 @@ namespace Hyperlink
                     host = new Host(store, delegate(string name, bool pair) { return name == "Java read-only test" ? 1 : 2; }, delegate { }, true);
                     host.Start(IPAddress.Loopback, 0);
                     File.WriteAllText(Path.Combine(root, "control.invite"), host.Invite("127.0.0.1").Encode());
+                    Wait(Path.Combine(root, "control.paired"));
+                    lock (store.Sync)
+                    {
+                        var peer = store.Data.Peers.Find(p => p.Name == "Java interoperability test");
+                        if (peer == null) throw new Exception("Java pairing identity missing");
+                        peer.FileRead = peer.FileWrite = peer.ClipboardToHost = peer.ClipboardFromHost = peer.Audio = true;
+                        store.Data.SharedFolder = Path.Combine(root, "shared");
+                        Directory.CreateDirectory(store.Data.SharedFolder);
+                        store.Save();
+                    }
+                    File.WriteAllText(Path.Combine(root, "control.permissions"), "ready");
                     Wait(Path.Combine(root, "control.done"));
                     int before = host.Input.Applied;
                     if (before < 1) throw new Exception("Controlled input was not applied");

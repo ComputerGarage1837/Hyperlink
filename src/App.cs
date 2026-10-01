@@ -67,7 +67,7 @@ namespace Hyperlink
             Text = "Hyperlink · Local approval"; ClientSize = new Size(560, 360); StartPosition = FormStartPosition.CenterParent;
             FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; BackColor = Theme.Background; ForeColor = Theme.Text; TopMost = true;
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(25), ColumnCount = 1, RowCount = 4 };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 45));
             layout.Controls.Add(Theme.Label(pairing ? "Pair a trusted computer" : "Allow this connection?", 16, null, FontStyle.Bold), 0, 0);
             layout.Controls.Add(Theme.Label(name + (pairing ? " wants permission to connect to this computer." : " wants to view this computer now."), 11), 0, 1);
             layout.Controls.Add(Theme.Label(pairing ? "Only approve an invitation you shared. Every session still requires your approval. You can revoke access at any time." : "Screen content becomes visible after approval. Control also permits pointer and keyboard input. Stop the session locally at any time.", 10, Theme.Muted), 0, 2);
@@ -210,9 +210,10 @@ namespace Hyperlink
             Text = device.Name + " · Hyperlink"; Size = new Size(1080, 760); MinimumSize = new Size(980, 600); StartPosition = FormStartPosition.CenterScreen;
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             BackColor = Theme.Background; ForeColor = Theme.Text;
-            var bar = new TableLayoutPanel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(16), BackColor = Theme.Sidebar, ColumnCount = 4, RowCount = 1 };
-            bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 3; i++) bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
+            var bar = new TableLayoutPanel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(16), BackColor = Theme.Sidebar, ColumnCount = 5, RowCount = 1 };
+            bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); for (int i = 0; i < 4; i++) bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 155));
             var disconnect = Theme.Button("Disconnect"); disconnect.Dock = DockStyle.Fill; disconnect.Click += delegate { Close(); }; bar.Controls.Add(disconnect, 3, 0);
+            var transfers = Theme.Button("Session tools"); transfers.Dock = DockStyle.Fill; transfers.Click += delegate { if (!remote.SupportsExtensions) { MessageBox.Show(this, "Update the host to use files and clipboard."); return; } TransferPanel.ShowFor(remote, this); }; bar.Controls.Add(transfers, 4, 0);
             var full = Theme.Button("Full screen"); full.Dock = DockStyle.Fill; full.Click += delegate { if (!fullscreen) { savedBounds = Bounds; FormBorderStyle = FormBorderStyle.None; WindowState = FormWindowState.Normal; Bounds = Screen.FromControl(this).Bounds; full.Text = "Exit full screen"; } else { FormBorderStyle = FormBorderStyle.Sizable; Bounds = savedBounds; full.Text = "Full screen"; } fullscreen = !fullscreen; }; bar.Controls.Add(full, 2, 0);
             var release = Theme.Button("Release keys"); release.Dock = DockStyle.Fill; release.Click += delegate { surface.Release(); }; bar.Controls.Add(release, 1, 0);
             state = Theme.Label("Connecting securely…", 9, Theme.Muted); state.Dock = DockStyle.Fill; state.TextAlign = ContentAlignment.MiddleLeft; bar.Controls.Add(state, 0, 0);
@@ -258,7 +259,7 @@ namespace Hyperlink
             { string target = name; var b = Theme.Button(name); b.Width = 238; b.Height = 48; b.TextAlign = ContentAlignment.MiddleLeft; b.Padding = new Padding(12, 0, 0, 0); b.Margin = new Padding(0, 0, 0, 10); b.Click += delegate { page = target; Render(); }; navigation.Add(name, b); nav.Controls.Add(b); }
             var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
             var identity = Theme.Label("LOCAL IDENTITY\n" + store.Data.Name + "\n\nWindows-protected\nlocal identity", 9, Theme.Muted); identity.Dock = DockStyle.Fill; bottom.Controls.Add(identity);
-            var version = Theme.Label("v0.3.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
+            var version = Theme.Label("v0.4.0   /   WINDOWS DRAFT", 8, Theme.Accent); version.Dock = DockStyle.Bottom; version.Height = 25; bottom.Controls.Add(version);
             sidebar.Controls.Add(nav); sidebar.Controls.Add(bottom); sidebar.Controls.Add(new Brand());
             var shell = new Panel { Dock = DockStyle.Fill, Padding = new Padding(30, 22, 30, 18) };
             content = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
@@ -406,16 +407,25 @@ namespace Hyperlink
             if (peers.Length == 0) { var c = new Card { Width = 750, Height = 180 }; var s = Theme.Label("No computers have access yet.\n\nCreate an invitation on This computer, then approve pairing locally. Each connection also asks for your approval.", 12, Theme.Muted); s.Height = 140; c.Controls.Add(s); list.Controls.Add(c); }
             foreach (var peer in peers)
             {
-                var c = new Card { Width = 750, Height = 140, Margin = new Padding(0, 0, 0, 14) };
-                var revoke = Theme.Button("Revoke access"); revoke.ForeColor = Theme.Red; revoke.Dock = DockStyle.Right; revoke.Width = 155; revoke.Click += delegate { host.Revoke(peer.Id); Render(); }; c.Controls.Add(revoke);
-                var labels = new Panel { Dock = DockStyle.Fill }; var info = Theme.Label((peer.Control ? "View and control" : "View only") + " · Local approval required\nIdentity: " + peer.Id.Substring(0, 16), 9, Theme.Muted); info.Height = 58; labels.Controls.Add(info); labels.Controls.Add(Theme.Label(peer.Name, 16, null, FontStyle.Bold)); c.Controls.Add(labels); list.Controls.Add(c);
+                var c = new Card { Width = 750, Height = 220, Margin = new Padding(0, 0, 0, 14) };
+                var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+                layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+                var labels = new Panel { Dock = DockStyle.Fill };
+                var info = Theme.Label((peer.Control ? "View and control" : "View only") + " · Local approval required\nIdentity: " + peer.Id.Substring(0, 16), 9, Theme.Muted); info.Height = 58;
+                labels.Controls.Add(info); labels.Controls.Add(Theme.Label(peer.Name, 16, null, FontStyle.Bold)); layout.Controls.Add(labels, 0, 0);
+                var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+                var permissions = Theme.Button("Permissions and shared folder"); permissions.Width = 280; permissions.Height = 34;
+                permissions.Click += delegate { using (var dialog = new ExtensionPermissions(store, host, peer)) dialog.ShowDialog(this); Render(); }; actions.Controls.Add(permissions);
+                var revoke = Theme.Button("Revoke access"); revoke.ForeColor = Theme.Red; revoke.Width = 155; revoke.Height = 34;
+                revoke.Click += delegate { host.Revoke(peer.Id); Render(); }; actions.Controls.Add(revoke);
+                layout.Controls.Add(actions, 0, 1); c.Controls.Add(layout); list.Controls.Add(c);
             }
             list.SizeChanged += delegate { foreach (Control c in list.Controls) c.Width = Math.Max(400, list.ClientSize.Width - 20); };
             content.Controls.Add(list); content.Controls.Add(Header("Access to this computer", "Every grant is specific to a paired computer. Revoking also stops its active session."));
         }
         void About()
         {
-            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.3.0\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nInvite-only account controller tested; public domain deployment pending\r\nAndroid APK built; on-device launch unverified\r\nUnattended service, UAC / lock-screen control and authenticated updates remain unfinished\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; card.Controls.Add(text); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
+            var card = new Card { Dock = DockStyle.Fill }; var text = new TextBox { Text = "Hyperlink 0.4.0\r\n\r\nA working, attended Windows draft.\r\n\r\nAVAILABLE NOW\r\nLive screen viewing and pointer / keyboard control\r\nTLS 1.2 with pinned certificates and signed device challenges\r\nOne-time invitations, per-device grants, local approval and revocation\r\nWindows-protected identity storage and a local Stop button\r\n\r\nDRAFT LIMITS\r\nJPEG capture, maximum 1600 × 1000, 30 fps requested cap\r\nDelivered frame rate is measured in the viewer; 120 fps is unverified\r\nDirect LAN / private VPN only; no rendezvous or relay\r\nInvite-only account controller tested; public domain deployment pending\r\nAndroid APK built; on-device launch unverified\r\nUnattended service, UAC / lock-screen control and authenticated updates remain unfinished\r\n\r\nUse only for a private evaluation with trusted computers.\r\nThis unsigned draft is not the security-audited family release.", Font = Theme.Font(11), ForeColor = Theme.Muted, BackColor = Theme.Card, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, Dock = DockStyle.Fill }; card.Controls.Add(text); content.Controls.Add(card); content.Controls.Add(Header("Built for your own computers", "First draft · Native Windows · No installer or cloud signup."));
         }
     }
 

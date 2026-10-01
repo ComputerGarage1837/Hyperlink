@@ -12,6 +12,8 @@ import org.json.*;
 /** Attended, pinned desktop viewer. No credentials or desktop frames are persisted. */
 public final class ViewerActivity extends Activity implements Remote.Listener {
     private Remote remote;
+    private SessionTools tools;
+    private volatile boolean selectingDocument;
     private Screen screen;
     private TextView status;
     private LinearLayout controls;
@@ -32,6 +34,11 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
         status.setText("Connecting · owner approval required"); root.addView(status);
         LinearLayout toolbar = new LinearLayout(this); root.addView(toolbar);
         button(toolbar,"Disconnect",() -> finish());
+        button(toolbar,"Tools",() -> {
+            if(remote==null || !remote.extensions){status.setText("Session tools require a connected Hyperlink 0.4 host");return;}
+            if(tools==null || tools.isClosed())tools=new SessionTools(this,remote);
+            tools.show();
+        });
         button(toolbar,"Touchpad",() -> { direct=!direct; status.setText(direct?"Direct touch":"Touchpad"); });
         button(toolbar,"Keyboard",() -> {
             if(!control)return;
@@ -70,7 +77,7 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
             screen.pointerX=width/2f;screen.pointerY=height/2f;
             status.setText((allowed?"Control":"View only")+" · encrypted · 30 fps draft");});
     }
-    public void frame(byte[] jpeg) throws Exception {
+    public void frame(byte[] jpeg) throws Exception { if(selectingDocument)return;
         BitmapFactory.Options bounds=new BitmapFactory.Options(); bounds.inJustDecodeBounds=true;
         BitmapFactory.decodeByteArray(jpeg,0,jpeg.length,bounds);
         if(bounds.outWidth!=frameWidth||bounds.outHeight!=frameHeight||bounds.outWidth<1||bounds.outHeight<1||bounds.outWidth>1600||bounds.outHeight>1000)
@@ -86,8 +93,18 @@ public final class ViewerActivity extends Activity implements Remote.Listener {
             if(next!=null){if(stopped)next.recycle();else screen.present(next);}});
     }
     public void ended(String reason) {main.post(() -> {if(stopped)return;control=false;enableControls(false);status.setText(reason);});}
-    @Override protected void onStop() {super.onStop();stopped=true;if(remote!=null)remote.close();
+    @Override protected void onStop() {super.onStop();
+        if(tools!=null && tools.isPicking() && !isFinishing()){
+            selectingDocument=true;if(remote!=null)remote.release();
+            synchronized(frames){if(pending!=null){pending.recycle();pending=null;}}screen.clear();return;
+        }
+        stopped=true;if(tools!=null)tools.close();if(remote!=null)remote.close();
         synchronized(frames){if(pending!=null){pending.recycle();pending=null;}}screen.clear();}
+    @Override protected void onActivityResult(int request,int result,android.content.Intent data){
+        super.onActivityResult(request,result,data);selectingDocument=false;
+        if(tools!=null && (request==SessionTools.UPLOAD || request==SessionTools.DOWNLOAD_FOLDER))tools.picked(request,result,data);
+    }
+    @Override protected void onDestroy(){if(tools!=null)tools.close();if(remote!=null)remote.close();super.onDestroy();}
 
     private final class Screen extends View {
         private Bitmap bitmap;

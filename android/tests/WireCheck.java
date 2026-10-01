@@ -49,10 +49,13 @@ public final class WireCheck {
         try(PinnedWire wire=new PinnedWire(address,port,fingerprint)){
             authenticate(wire,pair,fingerprint,"{\"version\":1,\"operation\":\"pair\",\"id\":\""+id+"\",\"publicKey\":\""+xml+"\",\"name\":\""+name+"\",\"code\":\""+text(invite,"Code")+"\"}");
             if(!text(read(wire),"kind").equals("paired"))throw new AssertionError("Pairing failed");
+            if(!readonly){Files.write(root.resolve("control.paired"),new byte[]{1});long deadline=System.currentTimeMillis()+10000;
+                while(!Files.exists(root.resolve("control.permissions"))){if(System.currentTimeMillis()>deadline)throw new IOException("Owner fixture permissions timed out");Thread.sleep(20);}}
         }
         try(PinnedWire wire=new PinnedWire(address,port,fingerprint)){
             authenticate(wire,pair,fingerprint,"{\"version\":1,\"operation\":\"connect\",\"id\":\""+id+"\"}");
             String accepted=read(wire);if(!text(accepted,"kind").equals("accepted"))throw new AssertionError("Session not accepted");
+            if(!readonly)extensions(wire);
             if(!accepted.contains("\"control\":"+(!readonly)))throw new AssertionError("Wrong input permission");
             wire.timeout(8000);PinnedWire.Packet image=wire.read();
             if(image.kind!=10||ImageIO.read(new ByteArrayInputStream(image.bytes))==null)throw new AssertionError("JPEG frame failed");
@@ -61,6 +64,33 @@ public final class WireCheck {
             else {send(wire,"{\"kind\":\"ping\"}");for(int n=0;n<10;n++)wire.read();}
         }
         Files.write(root.resolve(readonly?"readonly.done":"control.done"),new byte[]{1});
+    }
+    private static String request(PinnedWire wire,String operation,String fields) throws Exception {
+        String id=java.util.UUID.randomUUID().toString().replace("-","");
+        send(wire,"{\"kind\":\"extension\",\"request\":\""+id+"\",\"operation\":\""+operation+"\""+fields+"}");
+        for(int n=0;n<300;n++){PinnedWire.Packet packet=wire.read();if(packet.kind!=1)continue;
+            String reply=new String(packet.bytes,StandardCharsets.UTF_8);
+            if(text(reply,"request").equals(id)){if(!reply.contains("\"ok\":true"))throw new AssertionError("Extension denied: "+operation);return reply;}}
+        throw new IOException("Extension reply missing");
+    }
+    private static void extensions(PinnedWire wire) throws Exception {
+        byte[] bytes="Android file integrity fixture".getBytes(StandardCharsets.UTF_8);
+        String digest=Signing.hex(Signing.hash(bytes));
+        String begin=request(wire,"file-upload-begin",",\"name\":\"android-fixture.txt\",\"size\":"+bytes.length+",\"sha256\":\""+digest+"\"");
+        String id=text(begin,"id"),data=Base64.getEncoder().encodeToString(bytes);
+        String written=request(wire,"file-upload-write",",\"id\":\""+id+"\",\"offset\":0,\"data\":\""+data+"\"");
+        if(number(written,"offset")!=bytes.length)throw new AssertionError("Upload offset mismatch");
+        String commit=request(wire,"file-upload-commit",",\"id\":\""+id+"\"");if(!text(commit,"sha256").equals(digest))throw new AssertionError("Upload integrity mismatch");
+        begin=request(wire,"file-download-begin",",\"name\":\"android-fixture.txt\"");id=text(begin,"id");
+        String downloaded=request(wire,"file-download-read",",\"id\":\""+id+"\",\"offset\":0");
+        if(!java.util.Arrays.equals(bytes,Base64.getDecoder().decode(text(downloaded,"data"))) || !text(downloaded,"sha256").equals(digest))throw new AssertionError("Download integrity mismatch");
+        request(wire,"file-cancel","");
+        request(wire,"clipboard-write",",\"text\":\"Android clipboard fixture\"");
+        if(!text(request(wire,"clipboard-read",""),"text").equals("Android clipboard fixture"))throw new AssertionError("Directional clipboard mismatch");
+        String audio=request(wire,"audio-start","");if(number(audio,"sampleRate")!=48000 || number(audio,"channels")!=2 || number(audio,"bits")!=16)throw new AssertionError("Audio descriptor mismatch");
+        boolean received=false;for(int n=0;n<100;n++){PinnedWire.Packet packet=wire.read();if(packet.kind==11){if(packet.bytes.length!=3856)throw new AssertionError("Audio frame bounds");received=true;break;}}
+        if(!received)throw new AssertionError("Audio packet missing");request(wire,"audio-stop","");
+        System.out.println("Java / Windows encrypted file, clipboard and synthetic audio checks passed");
     }
     public static void main(String[] args) throws Exception {Path root=Paths.get(args[0]);session(root,false);session(root,true);System.out.println("Java / Windows wire interoperability passed.");}
 }

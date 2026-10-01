@@ -8,6 +8,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.*;
 
 final class Remote implements Closeable {
+    interface AudioSink { void accept(byte[] packet); }
+    private final ReplyInbox replies = new ReplyInbox();
+    volatile boolean extensions;
+    volatile AudioSink audioSink;
     interface Listener { void ready(int width, int height, boolean control, boolean text); void frame(byte[] jpeg) throws Exception; void ended(String reason); }
     private final Identity identity;
     private final Listener listener;
@@ -64,7 +68,7 @@ final class Remote implements Closeable {
                 authenticate(connection, identity, Json.object("version", 1, "operation", "connect", "id", identity.id), peer.getString("Fingerprint"));
                 JSONObject reply = json(connection);
                 if (!reply.optString("kind").equals("accepted")) throw new IOException("The owner did not approve this session");
-                width = reply.getInt("width"); height = reply.getInt("height"); control = reply.getBoolean("control"); textInput = reply.optBoolean("textInput", false);
+                width = reply.getInt("width"); height = reply.getInt("height"); control = reply.getBoolean("control"); textInput = reply.optBoolean("textInput", false); extensions = reply.optBoolean("extensions", false);
                 if (width < 1 || width > 1600 || height < 1 || height > 1000) throw new IOException("Unsupported host display");
                 connection.timeout(8000); if (closed.get()) return; listener.ready(width, height, control, textInput);
                 heartbeat = Executors.newSingleThreadScheduledExecutor(task -> { Thread t = new Thread(task, "Hyperlink heartbeat"); t.setDaemon(true); return t; });
@@ -72,7 +76,15 @@ final class Remote implements Closeable {
                 while (!closed.get()) {
                     PinnedWire.Packet packet = connection.read();
                     if (packet.kind == 10) listener.frame(packet.bytes);
-                    else { JSONObject event = Json.parse(packet.bytes, 16384); if (!event.optString("kind").equals("pong")) throw new IOException("The host ended this session"); }
+                    else if (packet.kind == 11) { AudioSink sink = audioSink; if (sink != null) sink.accept(packet.bytes); }
+                    else {
+                        JSONObject event = Json.parse(packet.bytes, 16384);
+                        if (event.optString("kind").equals("extension")) {
+                            String request = event.getString("request");
+                            if (!request.matches("[a-f0-9]{32}")) throw new IOException("Invalid session tool reply");
+                            replies.accept(request, packet.bytes);
+                        } else if (!event.optString("kind").equals("pong")) throw new IOException("The host ended this session");
+                    }
                 }
             } catch (Exception e) { finish("Connection ended. The host may be offline, access may have ended, or a secure connection could not be established."); }
         }, "Hyperlink desktop"); reader.setDaemon(true); reader.start();
@@ -81,6 +93,19 @@ final class Remote implements Closeable {
         if (closed.get() || wire == null) return;
         try { writer.execute(() -> { try { if (!closed.get()) send(wire, packet); } catch (IOException e) { finish("Connection interrupted"); } }); }
         catch (RejectedExecutionException e) { finish("Connection ended because input could not be delivered safely"); }
+    }
+    JSONObject extension(String operation, Object... values) throws Exception {
+        if (!extensions || closed.get()) throw new IOException("This host does not offer session tools");
+        String request = java.util.UUID.randomUUID().toString().replace("-", "");
+        CompletableFuture<byte[]> future = replies.register(request);
+        try {
+            JSONObject packet = Json.object(values);
+            packet.put("kind", "extension"); packet.put("request", request); packet.put("operation", operation);
+            enqueue(packet);
+            JSONObject reply = Json.parse(replies.await(request, future), 16384);
+            if (!reply.getBoolean("ok")) throw new IOException("The host denied this operation. Check its owner permissions.");
+            return reply.getJSONObject("result");
+        } finally { replies.abandon(request, future); }
     }
     void input(Object... values) {
         if (!control || closed.get()) return;
@@ -93,6 +118,7 @@ final class Remote implements Closeable {
     void release() { input("type", "release"); }
     private void finish(String reason) {
         if (!closed.compareAndSet(false, true)) return;
+        replies.close(); audioSink = null;
         writer.shutdownNow(); if (heartbeat != null) heartbeat.shutdownNow();
         PinnedWire connection = wire; if (connection != null) { Thread closer = new Thread(() -> { try { connection.close(); } catch (IOException ignored) {} }, "Hyperlink disconnect"); closer.setDaemon(true); closer.start(); }
         listener.ended(reason);

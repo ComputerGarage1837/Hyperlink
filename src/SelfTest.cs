@@ -101,6 +101,8 @@ namespace Hyperlink
             Host testedHost = null;
             try
             {
+                int extensionChecks = ExtensionTests.Run(Path.Combine(root, "extensions"));
+                results.Add(extensionChecks + " file, clipboard and system-audio checks passed, including encrypted transfer and live revocation.");
                 var textInput = new InputController(true);
                 textInput.Apply(new Dictionary<string, object> { { "type", "text" }, { "text", "Family \u00e9 \ud83d\ude00" } }, null);
                 Check(textInput.Applied == 1 && textInput.Held == 0, "Unicode input did not complete safely.");

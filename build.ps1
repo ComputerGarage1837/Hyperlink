@@ -5,8 +5,11 @@ if (-not (Test-Path -LiteralPath $compiler)) { throw 'Hyperlink needs Windows wi
 New-Item -ItemType Directory -Path $Output -Force | Out-Null
 $exe = Join-Path ([IO.Path]::GetFullPath($Output)) 'Hyperlink.exe'
 $sources = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | Select-Object -ExpandProperty FullName)
-& $compiler /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /out:$exe /win32icon:"$PSScriptRoot/assets/hyperlink.ico" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Security.dll /reference:System.Web.Extensions.dll $sources
+. "$PSScriptRoot/scripts/AudioDependencies.ps1"
+$audioReferences = @(Get-HyperlinkAudioReferences)
+& $compiler /nologo /target:winexe /platform:x64 /optimize+ /warnaserror+ /out:$exe /win32icon:"$PSScriptRoot/assets/hyperlink.ico" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll /reference:System.Security.dll /reference:System.Web.Extensions.dll @audioReferences $sources
 if ($LASTEXITCODE -ne 0) { throw 'Compilation failed.' }
+Copy-HyperlinkAudioRuntime ([IO.Path]::GetDirectoryName($exe))
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination $Output
 New-Item -ItemType Directory -Path (Join-Path $Output 'docs') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs/ROADMAP.md') -Destination (Join-Path $Output 'docs')

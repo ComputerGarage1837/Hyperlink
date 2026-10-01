@@ -48,7 +48,7 @@ public final class PinnedWire implements Closeable {
     public void timeout(int milliseconds) throws SocketException { socket.setSoTimeout(milliseconds); }
     public Packet read() throws IOException {
         int kind = input.readUnsignedByte(), size = input.readInt();
-        if ((kind != 1 && kind != 10) || size < 1 || size > (kind == 1 ? 16384 : 4*1024*1024)) throw new IOException("Invalid packet size or type");
+        if ((kind != 1 && kind != 10 && kind != 11) || size < 1 || size > (kind == 1 ? 16384 : kind == 11 ? 8208 : 4*1024*1024)) throw new IOException("Invalid packet size or type");
         byte[] bytes = new byte[size]; input.readFully(bytes); return new Packet(kind, bytes);
     }
     public void write(int kind, byte[] bytes) throws IOException {

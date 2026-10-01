@@ -24,6 +24,8 @@ namespace Hyperlink
     {
         public string Id, Name, PublicKey;
         public bool Control;
+        public bool FileRead, FileWrite, ClipboardToHost, ClipboardFromHost;
+        public bool Audio;
     }
     public sealed class Device
     {
@@ -38,6 +40,7 @@ namespace Hyperlink
         public string AccountRefresh;
         public string FamilyDeviceId;
         public int Port = 45831;
+        public string SharedFolder;
         public List<Peer> Peers = new List<Peer>();
         public List<Device> Devices = new List<Device>();
     }
@@ -178,7 +181,7 @@ namespace Hyperlink
         public readonly SslStream Stream;
         readonly object writeLock = new object();
         readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = 16384, RecursionLimit = 8 };
-        public Wire(TcpClient client, SslStream stream) { Client = client; Stream = stream; }
+        public Wire(TcpClient client, SslStream stream) { Client = client; Stream = stream; Stream.WriteTimeout = 5000; }
         public void Send(byte kind, byte[] bytes)
         {
             if (bytes.Length > 4 * 1024 * 1024) throw new InvalidDataException("Packet too large.");
@@ -190,6 +193,7 @@ namespace Hyperlink
         {
             byte[] h = Exact(5); kind = h[0];
             int size = (h[1] << 24) | (h[2] << 16) | (h[3] << 8) | h[4];
+            limit = Math.Min(limit, kind == 1 ? 16384 : kind == 11 ? 8208 : 4 * 1024 * 1024);
             if (size < 0 || size > limit) throw new InvalidDataException("Invalid packet size.");
             return Exact(size);
         }
@@ -444,7 +448,7 @@ namespace Hyperlink
         }
         void Handle(TcpClient client, TcpListener server)
         {
-            Wire wire = null; bool ownsSession = false;
+            Wire wire = null; bool ownsSession = false; SessionExtensions extensions = null;
             try
             {
                 client.NoDelay = true;
@@ -502,7 +506,7 @@ namespace Hyperlink
                     active = wire; activePeer = id; ownsSession = true;
                 }
                 var capture = new Capture(Monitor, synthetic);
-                wire.SendJson(new { kind = "accepted", control = control, textInput = true, width = capture.Width, height = capture.Height, requestedFps = 30, name = store.Data.Name });
+                wire.SendJson(new { kind = "accepted", control = control, textInput = true, extensions = true, width = capture.Width, height = capture.Height, requestedFps = 30, name = store.Data.Name });
                 status(name + " is connected · " + (control ? "View and control" : "View only"));
                 wire.Stream.ReadTimeout = 10000;
                 var sessionWire = wire;
@@ -526,6 +530,35 @@ namespace Hyperlink
                 {
                     var message = wire.ReadJson(); string kind = Wire.Text(message, "kind");
                     if (kind == "ping") continue;
+                    if (kind == "extension")
+                    {
+                        string request = Wire.Text(message, "request"), extensionOperation = Wire.Text(message, "operation"); Guid requestId;
+                        if (!Guid.TryParseExact(request, "N", out requestId)) throw new InvalidDataException("Invalid extension request.");
+                        lock (gate)
+                        {
+                            if (active != wire || listener != server) break;
+                            bool allowed; lock (store.Sync) allowed = SessionExtensions.Allowed(store.Data.Peers.FirstOrDefault(p => p.Id == id), extensionOperation);
+                            object result = null; bool ok = false;
+                            if (!allowed && extensions != null) { try { extensions.Dispose(); } catch { } extensions = null; }
+                            if (allowed) try
+                            {
+                                if (extensions == null) extensions = new SessionExtensions(delegate { lock (store.Sync) return store.Data.SharedFolder; }, synthetic, delegate(byte[] packet)
+                                {
+                                    lock (gate)
+                                    {
+                                        if (active != wire || listener != server || extensions == null || !extensions.OwnsAudio(packet)) return false;
+                                        lock (store.Sync) { var audioPeer = store.Data.Peers.FirstOrDefault(p => p.Id == id); if (audioPeer == null || !audioPeer.Audio) return false; }
+                                        wire.Send(11, packet); return true;
+                                    }
+                                });
+                                result = extensions.Handle(message); ok = true;
+                            }
+                            catch (Exception) { if (extensions != null) try { extensions.Dispose(); } catch { } extensions = null; }
+                            wire.SendJson(new { kind = "extension", request = request, ok = ok, result = result });
+                            if (ok && extensionOperation == "audio-start") extensions.StartAudio();
+                        }
+                        continue;
+                    }
                     if (kind != "input") throw new InvalidDataException("Unknown session message.");
                     lock (gate)
                     {
@@ -543,6 +576,7 @@ namespace Hyperlink
             }
             finally
             {
+                if (extensions != null) try { extensions.Dispose(); } catch { }
                 if (wire != null) wire.Dispose(); else client.Close();
                 lock (gate)
                 {
@@ -582,7 +616,7 @@ namespace Hyperlink
         public void Dispose() { Stop(); }
     }
 
-    public sealed class Remote : IDisposable
+    public sealed partial class Remote : IDisposable
     {
         readonly Store store;
         Wire wire;
@@ -626,6 +660,7 @@ namespace Hyperlink
                 var reply = connection.ReadJson();
                 if (Wire.Text(reply, "kind") != "accepted") throw new UnauthorizedAccessException(Wire.Text(reply, "message"));
                 Width = Wire.Number(reply, "width"); Height = Wire.Number(reply, "height");
+                object supports; SupportsExtensions = reply.TryGetValue("extensions", out supports) && supports is bool && (bool)supports;
                 if (Width < 1 || Width > 1600 || Height < 1 || Height > 1000) throw new InvalidDataException("Invalid frame dimensions.");
                 Control = (bool)reply["control"]; connection.Stream.ReadTimeout = 15000;
                 if (Volatile.Read(ref closed) != 0) throw new OperationCanceledException();
@@ -638,7 +673,8 @@ namespace Hyperlink
                         while (true)
                         {
                             byte kind; var bytes = connection.Read(out kind, 4 * 1024 * 1024);
-                            if (kind == 1) throw new IOException("The host stopped this session.");
+                            if (kind == 1) { AcceptExtension(bytes); continue; }
+                            if (kind == 11) { AcceptAudio(bytes); continue; }
                             if (kind != 10) throw new InvalidDataException("Unexpected frame.");
                             using (var stream = new MemoryStream(bytes)) using (var decoded = Image.FromStream(stream, true, true))
                             {
