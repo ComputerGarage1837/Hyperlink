@@ -34,6 +34,12 @@ namespace Hyperlink
                 if (!denied || File.Exists(empty)) throw new Exception("Empty recording was published.");
             }
             if (Directory.GetFiles(folder, "*.part").Length != 0) throw new Exception("Failed recording left a temporary file.");
+            using (var first = new JpegRecording(Path.Combine(folder, "exit-first.mkv"), 64, 32))
+            using (var second = new JpegRecording(Path.Combine(folder, "exit-second.mkv"), 64, 32))
+            {
+                first.Accept(jpeg); second.Accept(jpeg); JpegRecording.FinishAll();
+                if (JpegRecording.HasActive || !File.Exists(Path.Combine(folder, "exit-first.mkv")) || !File.Exists(Path.Combine(folder, "exit-second.mkv"))) throw new Exception("Application exit did not finalize its active recordings.");
+            }
             using (var output = File.Create(Path.Combine(folder, "timing.mkv")))
             {
                 JpegRecording.Header(output, 64, 32);

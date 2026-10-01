@@ -12,6 +12,12 @@ final class Remote implements Closeable {
     private final ReplyInbox replies = new ReplyInbox();
     volatile boolean extensions;
     volatile AudioSink audioSink;
+    final java.util.concurrent.atomic.AtomicReference<MjpegRecording> recording = new java.util.concurrent.atomic.AtomicReference<>();
+    boolean attachRecording(MjpegRecording candidate) {
+        if (closed.get() || !recording.compareAndSet(null,candidate)) return false;
+        if (closed.get()) { if(recording.compareAndSet(candidate,null))candidate.close(); return false; }
+        return true;
+    }
     interface Listener { void ready(int width, int height, boolean control, boolean text); void frame(byte[] jpeg) throws Exception; void ended(String reason); }
     private final Identity identity;
     private final Listener listener;
@@ -75,7 +81,7 @@ final class Remote implements Closeable {
                 if (closed.get()) { heartbeat.shutdownNow(); return; } heartbeat.scheduleAtFixedRate(() -> { try { enqueue(Json.object("kind", "ping")); } catch (JSONException e) { finish("Invalid keepalive"); } }, 2, 2, TimeUnit.SECONDS);
                 while (!closed.get()) {
                     PinnedWire.Packet packet = connection.read();
-                    if (packet.kind == 10) listener.frame(packet.bytes);
+                if (packet.kind == 10) {listener.frame(packet.bytes);MjpegRecording capture=recording.get();if(capture!=null)capture.accept(packet.bytes);}
                     else if (packet.kind == 11) { AudioSink sink = audioSink; if (sink != null) sink.accept(packet.bytes); }
                     else {
                         JSONObject event = Json.parse(packet.bytes, 16384);
@@ -119,6 +125,7 @@ final class Remote implements Closeable {
     private void finish(String reason) {
         if (!closed.compareAndSet(false, true)) return;
         replies.close(); AudioSink sink = audioSink; audioSink = null; if (sink != null) sink.close();
+        MjpegRecording capture=recording.getAndSet(null);if(capture!=null)capture.close();
         writer.shutdownNow(); if (heartbeat != null) heartbeat.shutdownNow();
         PinnedWire connection = wire; if (connection != null) { Thread closer = new Thread(() -> { try { connection.close(); } catch (IOException ignored) {} }, "Hyperlink disconnect"); closer.setDaemon(true); closer.start(); }
         listener.ended(reason);

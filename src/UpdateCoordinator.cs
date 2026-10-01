@@ -240,7 +240,7 @@ namespace Hyperlink
                     finally { if (!IsDisposed) choose.Enabled = online.Enabled = true; }
                 }
             };
-            install.Click += delegate { try { UpdateCoordinator.Start(job); Close(); owner.Close(); } catch { status.Text = "Could not start the update. No installed files were changed."; } };
+            install.Click += delegate { if (JpegRecording.HasActive) { status.Text = "Stop and save active recordings before installing the update."; return; } try { UpdateCoordinator.Start(job); Close(); owner.Close(); } catch { status.Text = "Could not start the update. No installed files were changed."; } };
         }
     }
 }

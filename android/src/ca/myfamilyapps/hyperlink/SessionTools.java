@@ -34,6 +34,7 @@ final class SessionTools implements AutoCloseable {
     private String downloadName;
     private volatile SessionAudio audio;
     private volatile boolean privacy;
+    private volatile MjpegRecording recording;
     SessionTools(Activity activity,Remote remote){
         this.activity=activity;this.remote=remote;
         dialog=new Dialog(activity);dialog.setTitle("Session tools");
@@ -48,6 +49,8 @@ final class SessionTools implements AutoCloseable {
         button("Copy box to Android clipboard",() -> {String value=text.getText().toString();try{checkText(value);ClipboardManager clipboard=(ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE);clipboard.setPrimaryClip(ClipData.newPlainText("Hyperlink",value));postStatus("Copied to Android clipboard");}catch(Exception e){postStatus("Could not copy text");}});
         button("Start host playback audio",() -> run(this::startAudio));
         button("Stop audio",() -> run(this::stopAudio));
+        button("Record video on this phone",() -> run(this::startRecording));
+        button("Stop and save recording",() -> {MjpegRecording capture=recording;if(capture!=null){capture.close();postStatus("Saving recording…");}});
         button("Hide host displays",() -> new AlertDialog.Builder(activity).setTitle("Local display privacy").setMessage("Requires the owner's separate permission. The local owner can press Ctrl+Alt+Shift+H to restore the displays and disconnect. Privacy stops after 30 minutes or when session tools close.").setPositiveButton("Start",(d,w) -> run(() -> {if(privacy)throw new IOException("Privacy is already active");remote.extension("privacy-start");privacy=true;if(closed){remote.extension("privacy-stop");privacy=false;}else postStatus("Host display privacy is active");})).setNegativeButton("Cancel",null).show());
         button("Restore host displays",() -> run(() -> {remote.extension("privacy-stop");privacy=false;postStatus("Host displays restored");}));
         Button cancel=new Button(activity);cancel.setText("Cancel file operation");cancel.setOnClickListener(v -> {cancelled.set(true);postStatus("Cancelling; already committed files remain saved.");});body.addView(cancel);
@@ -58,6 +61,26 @@ final class SessionTools implements AutoCloseable {
     boolean isClosed(){return closed;}
     boolean isPicking(){return picking;}
     private void button(String label,Runnable action){Button button=new Button(activity);button.setText(label);button.setOnClickListener(v -> action.run());actions.addView(button);}
+    private void startRecording() throws Exception {
+        if(recording!=null || remote.recording.get()!=null)throw new IOException("Recording is already active or saving");
+        boolean granted=false;MjpegRecording capture=null;
+        try {
+            remote.extension("recording-start");granted=true;
+            if(closed){remote.extension("recording-stop");return;}
+            capture=new MjpegRecording(new File(activity.getFilesDir(),"recordings"),remote.width,remote.height);
+            if(!remote.attachRecording(capture))throw new IOException("The session ended before recording started");
+            recording=capture;final MjpegRecording current=capture;
+            capture.completion.whenComplete((file,error) -> {
+                if(closed)return;
+                try {worker.execute(() -> {
+                    try{remote.extension("recording-stop");}catch(Exception ex){remote.close();}
+                    remote.recording.compareAndSet(current,null);if(recording==current)recording=null;
+                    postStatus(error==null?(current.storageLimit?"Recording stopped because of its size limit or storage speed. ":"")+"Saved locally. Open Recordings from the home screen to export.":"Recording failed; no incomplete clip was published.");
+                });}catch(RejectedExecutionException ex){if(!closed)remote.close();}
+            });
+            if(closed)capture.close();else postStatus("● RECORDING video only, up to 1 GiB. Stop to save locally; audio is not recorded.");
+        }catch(Exception ex){if(capture!=null)capture.close();if(granted)try{remote.extension("recording-stop");}catch(Exception ignored){remote.close();}throw ex;}
+    }
     private interface Job{void run() throws Exception;}
     private void run(Job job){
         if(closed || busy)return;busy=true;cancelled.set(false);enable(false);postStatus("Working…");
@@ -180,8 +203,9 @@ final class SessionTools implements AutoCloseable {
     }
     public void close(){
         if(closed)return;closed=true;cancelled.set(true);remote.audioSink=null;SessionAudio player=audio;audio=null;if(player!=null)player.close();
+        MjpegRecording closingRecording=recording;if(closingRecording!=null)closingRecording.close();
         // Queue cleanup after any active transfer; never block Android's UI thread.
-        try{worker.execute(() -> {try{if(privacy){remote.extension("privacy-stop");privacy=false;}remote.extension("audio-stop");}catch(Exception ignored){remote.close();}cancelHost();});}catch(RejectedExecutionException ignored){remote.close();}worker.shutdown();
+        try{worker.execute(() -> {try{if(closingRecording!=null){remote.extension("recording-stop");closingRecording.completion.whenComplete((file,error) -> remote.recording.compareAndSet(closingRecording,null));}if(privacy){remote.extension("privacy-stop");privacy=false;}remote.extension("audio-stop");}catch(Exception ignored){remote.close();}cancelHost();});}catch(RejectedExecutionException ignored){remote.close();}worker.shutdown();
         if(dialog.isShowing())dialog.dismiss();
     }
 }

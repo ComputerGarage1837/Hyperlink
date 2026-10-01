@@ -7,6 +7,7 @@ New-Item -ItemType Directory -Force -Path $root | Out-Null
 $sources=@("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/Signing.java","$PSScriptRoot/src/ca/myfamilyapps/hyperlink/PinnedWire.java","$PSScriptRoot/tests/SigningCheck.java","$PSScriptRoot/tests/WireCheck.java")
 $sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/ReplyInbox.java","$PSScriptRoot/tests/ReplyInboxCheck.java")
 $sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/WakePacket.java","$PSScriptRoot/tests/WakePacketCheck.java")
+$sources += @("$PSScriptRoot/src/ca/myfamilyapps/hyperlink/MjpegRecording.java","$PSScriptRoot/tests/RecordingCheck.java")
 & "$Jdk/bin/javac.exe" --release 8 -Xlint:-options -d $root @sources
 if($LASTEXITCODE -ne 0){throw 'Java tests did not compile'}
 & "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.SigningCheck "$root/android-proof.json"
@@ -15,6 +16,8 @@ if($LASTEXITCODE -ne 0){throw 'Android signing checks failed'}
 if($LASTEXITCODE -ne 0){throw 'Android session request checks failed'}
 & "$Jdk/bin/java.exe" -cp $root ca.myfamilyapps.hyperlink.WakePacketCheck
 if($LASTEXITCODE -ne 0){throw 'Android wake packet checks failed'}
+& "$Jdk/bin/java.exe" '-Djava.awt.headless=true' -cp $root ca.myfamilyapps.hyperlink.RecordingCheck $root
+if($LASTEXITCODE -ne 0){throw 'Android recording checks failed'}
 . "$PSScriptRoot/../scripts/AudioDependencies.ps1"
 $audioReferences=@(Get-HyperlinkAudioReferences)
 Copy-HyperlinkAudioRuntime $root

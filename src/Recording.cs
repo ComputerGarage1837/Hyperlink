@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,6 +10,13 @@ namespace Hyperlink
 {
     sealed class JpegRecording : IDisposable
     {
+        static readonly ConcurrentDictionary<JpegRecording, byte> active = new ConcurrentDictionary<JpegRecording, byte>();
+        internal static bool HasActive { get { return !active.IsEmpty; } }
+        internal static void FinishAll()
+        {
+            var pending = active.Keys.ToArray(); foreach (var recorder in pending) recorder.Stop();
+            Task.WhenAll(pending.Select(recorder => recorder.worker)).GetAwaiter().GetResult();
+        }
         sealed class Frame { public byte[] Bytes; public long Milliseconds; }
         readonly BlockingCollection<Frame> frames = new BlockingCollection<Frame>(8);
         readonly Stopwatch clock = Stopwatch.StartNew();
@@ -26,7 +34,8 @@ namespace Hyperlink
             if (w < 1 || h < 1 || w > 1920 || h > 1080) throw new ArgumentException("Unsupported recording dimensions.");
             width = w; height = h;
             temporary = Path.Combine(Path.GetDirectoryName(destination), ".hyperlink-recording-" + Guid.NewGuid().ToString("N") + ".part");
-            worker = Task.Run((Action)Write);
+            worker = new Task(Write); active.TryAdd(this, 0);
+            try { worker.Start(TaskScheduler.Default); } catch { byte ignored; active.TryRemove(this, out ignored); throw; }
         }
         internal void Accept(byte[] jpeg)
         {
@@ -65,7 +74,8 @@ namespace Hyperlink
             }
             finally
             {
-                Stop(); if (!complete && File.Exists(temporary)) File.Delete(temporary);
+                try { Stop(); if (!complete && File.Exists(temporary)) File.Delete(temporary); }
+                finally { byte ignored; active.TryRemove(this, out ignored); }
             }
         }
         internal static void Header(Stream output, int width, int height)

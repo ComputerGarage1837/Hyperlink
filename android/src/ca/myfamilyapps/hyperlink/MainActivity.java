@@ -29,6 +29,7 @@ public final class MainActivity extends Activity {
         label(body,"The owner approves pairing and each connection. This transport is limited to 30 fps.",14,TEXT);
         button(body,"Add a computer",this::pair);
         button(body,"Wake a computer",() -> WakeDialog.show(this));
+        button(body,"Recordings",() -> startActivity(new Intent(this,RecordingsActivity.class)));
         peers = column(this); body.addView(peers);
         label(body,"Family account",22,TEXT); label(body,"hyperlink.myfamilyapps.ca",14,MINT);
         username = field(body,"Username",false); password = field(body,"Password",true); code = field(body,"Authenticator code",false);
